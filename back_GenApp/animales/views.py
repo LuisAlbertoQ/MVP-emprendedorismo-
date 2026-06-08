@@ -28,12 +28,8 @@ class IsPaidPlan(permissions.BasePermission):
 class AnimalViewSet(viewsets.ModelViewSet):
     serializer_class = AnimalSerializer
     permission_classes = [permissions.IsAuthenticated]
-
-    def get_queryset(self):
-        return Animal.objects.filter(
-            usuario=self.request.user,
-            activo=True
-        ).select_related('padre', 'madre')
+    lookup_field = 'uid'
+    lookup_url_kwarg = 'pk'
 
     def get_serializer_class(self):
         if self.action == 'list':
@@ -108,6 +104,7 @@ class SyncView(APIView):
         changes = serializer.validated_data.get('changes', [])
 
         created_or_updated_uids = {}
+        processed_uids = []
 
         for change in changes:
             action = change.get('action', 'create')

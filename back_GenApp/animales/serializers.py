@@ -1,24 +1,41 @@
 from rest_framework import serializers
+from django.db import IntegrityError
 from .models import Animal, Especie, Sexo
+
+
+class UidToAnimalField(serializers.Field):
+    def to_internal_value(self, data):
+        if not data:
+            return None
+        try:
+            return Animal.objects.get(uid=data, usuario=self.context['request'].user)
+        except Animal.DoesNotExist:
+            raise serializers.ValidationError('Animal no encontrado')
+        except ValueError:
+            raise serializers.ValidationError('UID inválido')
+
+    def to_representation(self, value):
+        return str(value.uid) if value else None
 
 
 class AnimalSerializer(serializers.ModelSerializer):
     padre_uid = serializers.UUIDField(source='padre.uid', read_only=True, allow_null=True)
     madre_uid = serializers.UUIDField(source='madre.uid', read_only=True, allow_null=True)
-    usuario = serializers.HiddenField(default=serializers.CurrentUserDefault())
+    padre = UidToAnimalField(required=False, allow_null=True)
+    madre = UidToAnimalField(required=False, allow_null=True)
 
     class Meta:
         model = Animal
         fields = [
-            'uid', 'arete', 'especie', 'sexo', 'fecha_nacimiento',
+            'uid', 'usuario', 'arete', 'especie', 'sexo', 'fecha_nacimiento',
             'nombre', 'raza', 'padre', 'madre', 'padre_uid', 'madre_uid',
             'foto', 'observaciones', 'activo', 'sync_status',
             'created_at', 'updated_at'
         ]
-        read_only_fields = ['uid', 'sync_status', 'created_at', 'updated_at']
+        read_only_fields = ['uid', 'usuario', 'sync_status', 'created_at', 'updated_at']
 
     def validate(self, data):
-        usuario = data.get('usuario') or (self.instance.usuario if self.instance else None)
+        usuario = self.context['request'].user
         if not usuario:
             raise serializers.ValidationError('Usuario no encontrado')
 
@@ -31,23 +48,22 @@ class AnimalSerializer(serializers.ModelSerializer):
 
         return data
 
-    def validate_padre(self, value):
-        if value:
-            usuario = self.context['request'].user
-            if value.usuario != usuario:
-                raise serializers.ValidationError('El padre debe pertenecer al mismo usuario')
-            if self.instance and value.id == self.instance.id:
-                raise serializers.ValidationError('Un animal no puede ser su propio padre')
+    def validate_arete(self, value):
+        usuario = self.context['request'].user
+        if self.instance is None:
+            if Animal.objects.filter(usuario=usuario, arete=value).exists():
+                raise serializers.ValidationError(
+                    f'Ya existe un animal registrado con el arete "{value}".'
+                )
         return value
 
-    def validate_madre(self, value):
-        if value:
-            usuario = self.context['request'].user
-            if value.usuario != usuario:
-                raise serializers.ValidationError('La madre debe pertenecer al mismo usuario')
-            if self.instance and value.id == self.instance.id:
-                raise serializers.ValidationError('Un animal no puede ser su propia madre')
-        return value
+    def create(self, validated_data):
+        try:
+            return super().create(validated_data)
+        except IntegrityError:
+            raise serializers.ValidationError({
+                'arete': f'Ya existe un animal con el arete "{validated_data.get("arete")}".'
+            })
 
 
 class AnimalListSerializer(serializers.ModelSerializer):
