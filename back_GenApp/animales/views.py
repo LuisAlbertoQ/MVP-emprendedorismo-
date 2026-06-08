@@ -68,6 +68,11 @@ class AnimalViewSet(viewsets.ModelViewSet):
             activo = self.request.query_params.get('activo')
             if activo is not None:
                 queryset = queryset.filter(activo=activo.lower() == 'true')
+            search = self.request.query_params.get('search')
+            if search:
+                queryset = queryset.filter(
+                    Q(arete__icontains=search) | Q(nombre__icontains=search)
+                )
         return queryset.select_related('padre', 'madre')
 
     def perform_create(self, serializer):
@@ -83,6 +88,7 @@ class AnimalViewSet(viewsets.ModelViewSet):
             OpenApiParameter(name='especie', type=str),
             OpenApiParameter(name='sexo', type=str),
             OpenApiParameter(name='activo', type=bool),
+            OpenApiParameter(name='search', type=str),
         ]
     )
     def list(self, request, *args, **kwargs):

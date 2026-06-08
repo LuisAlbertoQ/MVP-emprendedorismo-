@@ -20,6 +20,7 @@ class AnimalListState {
   final bool hasMore;
   final String? filtroEspecie;
   final String? filtroSexo;
+  final String search;
 
   const AnimalListState({
     this.animales = const [],
@@ -29,6 +30,7 @@ class AnimalListState {
     this.hasMore = true,
     this.filtroEspecie,
     this.filtroSexo,
+    this.search = '',
   });
 
   AnimalListState copyWith({
@@ -39,6 +41,7 @@ class AnimalListState {
     bool? hasMore,
     String? filtroEspecie,
     String? filtroSexo,
+    String? search,
   }) {
     return AnimalListState(
       animales: animales ?? this.animales,
@@ -48,6 +51,7 @@ class AnimalListState {
       hasMore: hasMore ?? this.hasMore,
       filtroEspecie: filtroEspecie ?? this.filtroEspecie,
       filtroSexo: filtroSexo ?? this.filtroSexo,
+      search: search ?? this.search,
     );
   }
 }
@@ -59,7 +63,11 @@ class AnimalListNotifier extends StateNotifier<AnimalListState> {
 
   Future<void> loadAnimales({bool refresh = false}) async {
     if (refresh) {
-      state = const AnimalListState();
+      state = AnimalListState(
+        filtroEspecie: state.filtroEspecie,
+        filtroSexo: state.filtroSexo,
+        search: state.search,
+      );
     }
     if (state.isLoading || !state.hasMore) return;
     state = state.copyWith(isLoading: true);
@@ -68,23 +76,34 @@ class AnimalListNotifier extends StateNotifier<AnimalListState> {
         page: state.page,
         especie: state.filtroEspecie,
         sexo: state.filtroSexo,
+        search: state.search,
       );
       state = state.copyWith(
-        animales: [...state.animales, ...items],
+        animales: refresh ? items : [...state.animales, ...items],
         isLoading: false,
         page: state.page + 1,
         hasMore: items.length >= 20,
         error: null,
       );
     } catch (e) {
-      state = state.copyWith(isLoading: false, error: e.toString());
+      state = state.copyWith(isLoading: false, hasMore: false, error: e.toString());
     }
   }
 
   void setFiltros({String? especie, String? sexo}) {
     state = AnimalListState(
-      filtroEspecie: especie ?? state.filtroEspecie,
-      filtroSexo: sexo ?? state.filtroSexo,
+      filtroEspecie: especie,
+      filtroSexo: sexo,
+      search: state.search,
+    );
+    loadAnimales(refresh: true);
+  }
+
+  void setSearch(String query) {
+    state = AnimalListState(
+      filtroEspecie: state.filtroEspecie,
+      filtroSexo: state.filtroSexo,
+      search: query,
     );
     loadAnimales(refresh: true);
   }

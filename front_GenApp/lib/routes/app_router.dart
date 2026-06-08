@@ -10,8 +10,8 @@ import 'package:front_genapp/ui/features/animales/views/animal_list_screen.dart'
 import 'package:front_genapp/ui/features/animales/views/animal_detail_screen.dart';
 import 'package:front_genapp/ui/features/animales/views/animal_form_screen.dart';
 import 'package:front_genapp/ui/features/animales/views/arbol_screen.dart';
-import 'package:front_genapp/ui/features/reportes/views/reportes_screen.dart';
 import 'package:front_genapp/ui/features/perfil/views/perfil_screen.dart';
+import 'package:front_genapp/ui/features/reportes/views/reportes_screen.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
   final goRouter = GoRouter(
@@ -72,12 +72,12 @@ final routerProvider = Provider<GoRouter>((ref) {
             ],
           ),
           GoRoute(
-            path: '/reportes',
-            builder: (_, __) => const ReportesScreen(),
-          ),
-          GoRoute(
             path: '/perfil',
             builder: (_, __) => const PerfilScreen(),
+          ),
+          GoRoute(
+            path: '/reportes',
+            builder: (_, __) => const ReportesScreen(),
           ),
         ],
       ),
