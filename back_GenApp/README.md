@@ -10,12 +10,14 @@ API REST para gestión de criadores de alpacas, llamas y ovinos en la región an
 - **MySQL 8.0+** (Laragon)
 - **SimpleJWT** - Autenticación por tokens
 - **drf-spectacular** - Documentación OpenAPI
+- **ReportLab** - Generación de PDF
+- **Pillow** - Manejo de imágenes
 
 ## Requisitos
 
 - Python 3.12+
 - MySQL 8.0+ (Laragon)
-- Entorno virtual (venv)
+- Entorno virtual (venv) - ya creado en `env/`
 
 ## Instalación
 
@@ -23,16 +25,13 @@ API REST para gestión de criadores de alpacas, llamas y ovinos en la región an
 
 ```bash
 cd back_GenApp
-.\env\Scripts\Activate.ps1
+.\env\Scripts\python.exe -m pip install -r requirements.txt
 ```
 
-### 2. Instalar dependencias
+> Si la ejecución de scripts está deshabilitada, usa directamente el Python del venv:
+> `.\env\Scripts\python.exe manage.py <comando>`
 
-```bash
-pip install -r requirements.txt
-```
-
-### 3. Configurar base de datos
+### 2. Configurar base de datos
 
 Crear la base de datos en Laragon (MySQL):
 
@@ -40,7 +39,7 @@ Crear la base de datos en Laragon (MySQL):
 CREATE DATABASE geneapp CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 ```
 
-### 4. Variables de entorno
+### 3. Variables de entorno
 
 Editar `.env` en la raíz del proyecto:
 
@@ -56,55 +55,57 @@ ALLOWED_HOSTS=localhost,127.0.0.1
 CORS_ALLOWED_ORIGINS=http://localhost:8000,http://127.0.0.1:8000
 ```
 
-### 5. Ejecutar migraciones
+### 4. Migraciones
 
 ```bash
-python manage.py migrate
+.\env\Scripts\python.exe manage.py migrate
 ```
 
-### 6. Iniciar servidor
+### 5. Iniciar servidor
 
 ```bash
-python manage.py runserver
+.\env\Scripts\python.exe manage.py runserver
 ```
 
-El servidor estará disponible en: `http://localhost:8000`
+Servidor disponible en: `http://localhost:8000`
 
 ## Endpoints de la API
 
-### Autenticación
+### Autenticación (prefix: `/api/v1/auth/`)
+
+| Método | Endpoint | Descripción | Planes |
+|--------|----------|-------------|--------|
+| POST | `register/` | Registro (teléfono, nombre, password) | Todos |
+| POST | `login/` | Login (teléfono, password) → access + refresh | Todos |
+| POST | `refresh/` | Refrescar token JWT | Todos |
+| GET | `perfil/` | Perfil + plan + animales usados | Todos |
+| POST | `cambiar-plan/` | Cambiar plan (basico/criador) | Todos |
+| POST | `webhook-yape/` | Webhook para pagos Yape (stub) | Todos |
+
+### Animales (prefix: `/api/v1/animales/`)
+
+| Método | Endpoint | Descripción | Planes |
+|--------|----------|-------------|--------|
+| GET | `/` | Listar (paginado, ?especie=&sexo=&activo=) | Todos |
+| POST | `/` | Crear animal | Todos (limite) |
+| GET | `/{uid}/` | Detalle | Todos |
+| PUT | `/{uid}/` | Actualizar (completo) | Todos |
+| PATCH | `/{uid}/` | Actualizar (parcial) | Todos |
+| DELETE | `/{uid}/` | Eliminar (soft delete) | Todos |
+| GET | `/{uid}/arbol/` | Árbol genealógico (2-3 gen) | Todos |
+
+### Sincronización (prefix: `/api/v1/`)
 
 | Método | Endpoint | Descripción |
 |--------|----------|-------------|
-| POST | `/api/v1/auth/register/` | Registro de usuario |
-| POST | `/api/v1/auth/login/` | Login (retorna access/refresh token) |
-| POST | `/api/v1/auth/refresh/` | Refrescar token JWT |
-| GET | `/api/v1/auth/perfil/` | Obtener perfil y plan |
-| POST | `/api/v1/auth/cambiar-plan/` | Cambiar plan (basico/criador) |
+| POST | `sync/` | Sincronización offline (envía y recibe cambios) |
 
-### Animales
+### Reportes (prefix: `/api/v1/reporte/`)
 
-| Método | Endpoint | Descripción |
-|--------|----------|-------------|
-| GET | `/api/v1/animales/` | Listar animales (paginado) |
-| POST | `/api/v1/animales/` | Crear animal |
-| GET | `/api/v1/animales/{uid}/` | Detalle de animal |
-| PUT/PATCH | `/api/v1/animales/{uid}/` | Actualizar animal |
-| DELETE | `/api/v1/animales/{uid}/` | Eliminar (soft delete) |
-| GET | `/api/v1/animales/{uid}/arbol/` | Árbol genealógico |
-
-### Sincronización
-
-| Método | Endpoint | Descripción |
-|--------|----------|-------------|
-| POST | `/api/v1/sync/` | Sincronizar cambios offline |
-
-### Reportes (solo planes pagos)
-
-| Método | Endpoint | Descripción |
-|--------|----------|-------------|
-| GET | `/api/v1/reporte/animales/?format=csv` | Descargar CSV |
-| GET | `/api/v1/reporte/animales/?format=pdf` | Descargar PDF |
+| Método | Endpoint | Descripción | Planes |
+|--------|----------|-------------|--------|
+| GET | `animales/?format=csv` | Descargar CSV | Básico/Criador |
+| GET | `animales/?format=pdf` | Descargar PDF | Básico/Criador |
 
 ### Documentación
 
@@ -113,68 +114,147 @@ El servidor estará disponible en: `http://localhost:8000`
 | `/api/schema/` | Schema OpenAPI (JSON) |
 | `/api/docs/` | Swagger UI |
 
+## Estado de Implementación
+
+| Funcionalidad | Estado |
+|---------------|--------|
+| Registro y login JWT | ✅ Completo |
+| Perfil de usuario | ✅ Completo |
+| Planes (Gratuito/Básico/Criador) | ✅ Completo |
+| CRUD de animales | ✅ Completo |
+| Validación padre/madre | ✅ Completo |
+| Límite de animales por plan | ✅ Completo |
+| Árbol genealógico (2-3 gen) | ✅ Completo |
+| Sincronización offline | ✅ Completo |
+| Reportes CSV/PDF | ✅ Completo |
+| Filtros (especie, sexo, activo) | ✅ Completo |
+| Soft delete | ✅ Completo |
+| Webhook Yape | ⚠️ Stub básico |
+| Notificaciones push | ❌ Futura versión |
+| Exportación PDF/Excel | ✅ CSV y PDF |
+
 ## Modelos de Datos
 
 ### Usuario
 - `telefono` - Identificador único (login)
-- `plan` - Gratuito, Básico, Criador
+- `plan` - Gratuito / Básico / Criador
 - `first_name` - Nombre completo
+- `limite_animales` - Propiedad calculada según plan
+- `animales_count` - Propiedad calculada
 
 ### Animal
-- `uid` - UUID único
+- `uid` - UUID único (identificador para API)
 - `arete` - Código único por usuario
-- `especie` - alpaca, llama, ovino
-- `sexo` - hembra, macho
+- `especie` - alpaca / llama / ovino
+- `sexo` - hembra / macho
 - `fecha_nacimiento` - Fecha de nacimiento
-- `nombre` - Nombre opcional
-- `raza` - Raza opcional
-- `padre` / `madre` - Relaciones a otros animales
-- `foto` - Imagen del animal
-- `activo` - Soft delete
-- `sync_status` - Estado de sincronización
+- `nombre` - Opcional
+- `raza` - Opcional
+- `padre` / `madre` - Relaciones autopreferenciales
+- `foto` - Imagen del animal (ImageField)
+- `activo` - Borrado lógico
+- `sync_status` - sincronizado / pendiente / error
+- `created_at` / `updated_at` / `deleted_at`
 
 ## Planes de Suscripción
 
-| Plan | Límite Animales | Generaciones Árbol |
-|------|-----------------|-------------------|
-| Gratuito | 20 | 2 |
-| Básico | 150 | 3 |
-| Criador | 500 | 3 |
+| Plan | Precio | Límite Animales | Generaciones Árbol | Sincronización | Reportes |
+|------|--------|:---------------:|:------------------:|:--------------:|:--------:|
+| Gratuito | Gratis | 20 | 2 | Local | ❌ |
+| Básico | S/ 7.90/mes | 150 | 3 | Nube | ❌ |
+| Criador | S/ 19.90/mes | 500 | 3 | Nube | ✅ CSV/PDF |
 
-## Ejemplos de Uso
+## Flujo de Pruebas en Postman
 
-### Registro
-```bash
-curl -X POST http://localhost:8000/api/v1/auth/register/ \
-  -H "Content-Type: application/json" \
-  -d '{"telefono": "999888777", "nombre": "Juan Perez", "password": "123456"}'
+### 1. Registro
+```
+POST http://localhost:8000/api/v1/auth/register/
+{
+  "telefono": "999888777",
+  "nombre": "Juan Pérez",
+  "password": "123456"
+}
 ```
 
-### Login
-```bash
-curl -X POST http://localhost:8000/api/v1/auth/login/ \
-  -H "Content-Type: application/json" \
-  -d '{"telefono": "999888777", "password": "123456"}'
+### 2. Login (obtener token)
+```
+POST http://localhost:8000/api/v1/auth/login/
+{
+  "telefono": "999888777",
+  "password": "123456"
+}
+```
+→ Copiar `access` token → Auth: Bearer Token
+
+### 3. Ver perfil
+```
+GET http://localhost:8000/api/v1/auth/perfil/
 ```
 
-### Crear Animal
-```bash
-curl -X POST http://localhost:8000/api/v1/animales/ \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer <token>" \
-  -d '{
-    "arete": "ARE-001",
-    "especie": "alpaca",
-    "sexo": "macho",
-    "fecha_nacimiento": "2024-01-15",
-    "nombre": "Trueno"
-  }'
+### 4. Crear animales
+```
+POST http://localhost:8000/api/v1/animales/
+{
+  "arete": "PADRE-001",
+  "especie": "alpaca",
+  "sexo": "macho",
+  "fecha_nacimiento": "2022-06-15",
+  "nombre": "Relámpago",
+  "raza": "Suri"
+}
 ```
 
-### Ver Árbol Genealógico
-```bash
-curl -X GET http://localhost:8000/api/v1/animales/{uid}/arbol/ \
-  -H "Authorization: Bearer <token>"
+### 5. Crear hijo con padres
+```
+POST http://localhost:8000/api/v1/animales/
+{
+  "arete": "HIJO-001",
+  "especie": "alpaca",
+  "sexo": "macho",
+  "fecha_nacimiento": "2024-01-10",
+  "nombre": "Tormenta",
+  "raza": "Huacaya",
+  "padre": "<uid_padre>",
+  "madre": "<uid_madre>"
+}
+```
+
+### 6. Listar con filtros
+```
+GET http://localhost:8000/api/v1/animales/?especie=alpaca&sexo=macho
+```
+
+### 7. Detalle, actualizar, árbol
+```
+GET     /api/v1/animales/{uid}/
+PATCH   /api/v1/animales/{uid}/   {"nombre": "Nuevo nombre"}
+GET     /api/v1/animales/{uid}/arbol/
+```
+
+### 8. Sincronización
+```
+POST http://localhost:8000/api/v1/sync/
+{
+  "last_sync": null,
+  "changes": [
+    {
+      "uid": "<nuevo-uuid>",
+      "arete": "SYNC-001",
+      "especie": "ovino",
+      "sexo": "macho",
+      "fecha_nacimiento": "2024-02-15",
+      "action": "create"
+    }
+  ]
+}
+```
+
+### 9. Cambiar plan y reportes
+```
+POST http://localhost:8000/api/v1/auth/cambiar-plan/
+{"plan": "basico"}
+
+GET http://localhost:8000/api/v1/reporte/animales/?format=csv
 ```
 
 ## Estructura del Proyecto
@@ -185,41 +265,24 @@ back_GenApp/
 │   ├── settings.py       # Configuración Django
 │   └── urls.py           # Rutas principales
 ├── usuarios/             # App de usuarios
-│   ├── models.py         # Modelo Usuario
-│   ├── serializers.py    # Serializers de autenticación
-│   ├── views.py          # Vistas de autenticación
+│   ├── models.py         # Modelo Usuario (AbstractUser)
+│   ├── serializers.py    # Register, Login, Perfil, CambioPlan
+│   ├── views.py          # RegisterView, LoginView, PerfilView, etc.
 │   └── urls.py           # Rutas de usuarios
-├── animales/            # App de animales
-│   ├── models.py         # Modelo Animal
-│   ├── serializers.py    # Serializers de animales
-│   ├── views.py          # Vistas y ViewSets
+├── animales/             # App de animales
+│   ├── models.py         # Modelo Animal (con relaciones)
+│   ├── serializers.py    # CRUD, Sync, Reporte serializers
+│   ├── views.py          # AnimalViewSet, SyncView, ReporteView
 │   └── urls.py           # Rutas de animales
-├── media/               # Archivos subidos
+├── env/                  # Entorno virtual Python 3.12
+├── media/                # Archivos subidos (fotos)
 │   └── animales/         # Fotos de animales
-├── requirements.txt     # Dependencias Python
-└── .env                 # Variables de entorno
+├── requirements.txt      # Dependencias Python
+├── .env                  # Variables de entorno
+└── README.md             # Este archivo
 ```
 
-## Comandos Útiles
-
-```bash
-# Crear migraciones
-python manage.py makemigrations
-
-# Aplicar migraciones
-python manage.py migrate
-
-# Crear superusuario
-python manage.py createsuperuser
-
-# Verificar configuración
-python manage.py check
-
-#shell interactivo
-python manage.py shell
-```
-
-##_LIBRERIAS
+## Dependencias
 
 ```
 Django==4.2.11
@@ -232,6 +295,31 @@ python-decouple==3.8
 mysqlclient==2.2.4
 gunicorn==21.2.0
 reportlab==4.0.0
+```
+
+## Comandos Útiles
+
+```bash
+# Activar entorno virtual (con python directo sin policy)
+.\env\Scripts\python.exe manage.py <comando>
+
+# Crear migraciones
+.\env\Scripts\python.exe manage.py makemigrations
+
+# Aplicar migraciones
+.\env\Scripts\python.exe manage.py migrate
+
+# Crear superusuario
+.\env\Scripts\python.exe manage.py createsuperuser
+
+# Verificar configuración
+.\env\Scripts\python.exe manage.py check
+
+# Shell interactivo
+.\env\Scripts\python.exe manage.py shell
+
+# Iniciar servidor
+.\env\Scripts\python.exe manage.py runserver
 ```
 
 ## Producción

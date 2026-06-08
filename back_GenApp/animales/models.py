@@ -55,6 +55,7 @@ class Animal(models.Model):
             raise ValidationError({'padre': 'Un animal no puede ser su propio padre'})
         if self.madre and self.madre.id == self.id:
             raise ValidationError({'madre': 'Un animal no puede ser su propia madre'})
+        self.verificar_padres()
 
     def save(self, *args, **kwargs):
         self.full_clean()

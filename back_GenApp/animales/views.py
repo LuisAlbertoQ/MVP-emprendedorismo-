@@ -2,6 +2,7 @@ from rest_framework import viewsets, status, permissions
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework.renderers import BaseRenderer
 from django.db.models import Q
 from django.utils import timezone
 from django.http import HttpResponse
@@ -11,6 +12,22 @@ import io
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle
+
+
+class CSVRenderer(BaseRenderer):
+    media_type = 'text/csv'
+    format = 'csv'
+
+    def render(self, data, media_type=None, renderer_context=None):
+        return data
+
+
+class PDFRenderer(BaseRenderer):
+    media_type = 'application/pdf'
+    format = 'pdf'
+
+    def render(self, data, media_type=None, renderer_context=None):
+        return data
 
 from .models import Animal, SyncStatus
 from .serializers import (
@@ -53,6 +70,11 @@ class AnimalViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save(usuario=self.request.user, sync_status=SyncStatus.SIC)
+
+    def perform_destroy(self, instance):
+        instance.activo = False
+        instance.deleted_at = timezone.now()
+        instance.save()
 
     @extend_schema(
         parameters=[
@@ -150,7 +172,8 @@ class SyncView(APIView):
             elif action == 'update':
                 try:
                     animal = Animal.objects.get(uid=uid, usuario=request.user)
-                    if change.get('local_updated_at') and animal.updated_at < change['local_updated_at']:
+                    local_updated = change.get('local_updated_at')
+                    if not local_updated or animal.updated_at < local_updated:
                         for key, value in animal_data.items():
                             setattr(animal, key, value)
                         animal.save()
@@ -197,6 +220,14 @@ class SyncView(APIView):
 
 class ReporteView(APIView):
     permission_classes = [permissions.IsAuthenticated, IsPaidPlan]
+    renderer_classes = [CSVRenderer, PDFRenderer]
+
+    def perform_content_negotiation(self, request, force_format=None):
+        fmt = request.query_params.get('format', 'csv')
+        for renderer in self.renderer_classes:
+            if renderer.format == fmt:
+                return (renderer, renderer.media_type)
+        return (self.renderer_classes[0], self.renderer_classes[0].media_type)
 
     @extend_schema(
         parameters=[OpenApiParameter(name='format', type=str)],
@@ -242,14 +273,17 @@ class ReporteView(APIView):
         doc = SimpleDocTemplate(buffer, pagesize=letter)
         elements = []
 
-        data = [['Arete', 'Nombre', 'Especie', 'Sexo', 'F. Nacimiento']]
+        data = [['Arete', 'Nombre', 'Especie', 'Sexo', 'F. Nacimiento', 'Padre', 'Madre', 'Observaciones']]
         for animal in queryset:
             data.append([
                 animal.arete,
                 animal.nombre[:20],
                 animal.especie,
                 animal.sexo,
-                animal.fecha_nacimiento.isoformat() if animal.fecha_nacimiento else ''
+                animal.fecha_nacimiento.isoformat() if animal.fecha_nacimiento else '',
+                animal.padre.arete if animal.padre else 'N/A',
+                animal.madre.arete if animal.madre else 'N/A',
+                animal.observaciones
             ])
 
         table = Table(data)

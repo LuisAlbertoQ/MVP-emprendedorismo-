@@ -41,7 +41,11 @@ class AnimalSerializer(serializers.ModelSerializer):
 
         limite = usuario.limite_animales
         if usuario.animales_count >= limite:
-            if self.instance is None or data.get('activo', True):
+            if self.instance is None:
+                raise serializers.ValidationError(
+                    f'Has alcanzado el límite de {limite} animales de tu plan {usuario.plan}'
+                )
+            if not self.instance.activo and data.get('activo', True):
                 raise serializers.ValidationError(
                     f'Has alcanzado el límite de {limite} animales de tu plan {usuario.plan}'
                 )
@@ -73,7 +77,7 @@ class AnimalListSerializer(serializers.ModelSerializer):
 
 
 class SyncChangeSerializer(serializers.Serializer):
-    uid = serializers.UUIDField(required=False)
+    uid = serializers.UUIDField(required=True)
     arete = serializers.CharField()
     especie = serializers.ChoiceField(choices=Especie.choices)
     sexo = serializers.ChoiceField(choices=Sexo.choices)
