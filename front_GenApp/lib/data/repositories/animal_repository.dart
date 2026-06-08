@@ -57,4 +57,8 @@ class AnimalRepository {
   Future<Map<String, dynamic>> getResumen() async {
     return _api.get('/animales/resumen/');
   }
+
+  Future<void> download(String path, String savePath) async {
+    await _api.download(path, savePath);
+  }
 }

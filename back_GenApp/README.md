@@ -69,6 +69,14 @@ CORS_ALLOWED_ORIGINS=http://localhost:8000,http://127.0.0.1:8000
 
 Servidor disponible en: `http://localhost:8000`
 
+### 6. Correr tests
+
+```bash
+.\env\Scripts\python.exe manage.py test
+```
+
+Servidor disponible en: `http://localhost:8000`
+
 ## Endpoints de la API
 
 ### Autenticación (prefix: `/api/v1/auth/`)
@@ -86,13 +94,15 @@ Servidor disponible en: `http://localhost:8000`
 
 | Método | Endpoint | Descripción | Planes |
 |--------|----------|-------------|--------|
-| GET | `/` | Listar (paginado, ?especie=&sexo=&activo=) | Todos |
+| GET | `/` | Listar (paginado, ?especie=&sexo=&activo=&search=) | Todos |
 | POST | `/` | Crear animal | Todos (limite) |
 | GET | `/{uid}/` | Detalle | Todos |
 | PUT | `/{uid}/` | Actualizar (completo) | Todos |
 | PATCH | `/{uid}/` | Actualizar (parcial) | Todos |
 | DELETE | `/{uid}/` | Eliminar (soft delete) | Todos |
 | GET | `/{uid}/arbol/` | Árbol genealógico (2-3 gen) | Todos |
+| GET | `/candidatos/` | Lista para selector de padres | Todos |
+| GET | `/resumen/` | Stats (total, machos, hembras, especies) | Todos |
 
 ### Sincronización (prefix: `/api/v1/`)
 
@@ -127,7 +137,8 @@ Servidor disponible en: `http://localhost:8000`
 | Árbol genealógico (2-3 gen) | ✅ Completo |
 | Sincronización offline | ✅ Completo |
 | Reportes CSV/PDF | ✅ Completo |
-| Filtros (especie, sexo, activo) | ✅ Completo |
+| Búsqueda por arete/nombre | ✅ Completo |
+| Filtros (especie, sexo, activo, search) | ✅ Completo |
 | Soft delete | ✅ Completo |
 | Webhook Yape | ⚠️ Stub básico |
 | Notificaciones push | ❌ Futura versión |
@@ -256,6 +267,14 @@ POST http://localhost:8000/api/v1/auth/cambiar-plan/
 
 GET http://localhost:8000/api/v1/reporte/animales/?format=csv
 ```
+
+## Tests
+
+```bash
+.\env\Scripts\python.exe manage.py test
+```
+
+50 tests — modelos, serializers, views, límites por plan, árbol genealógico, validación padre/madre.
 
 ## Estructura del Proyecto
 

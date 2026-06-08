@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:front_genapp/data/services/api_service.dart';
 import 'package:front_genapp/ui/core/theme.dart';
 import 'package:front_genapp/ui/features/auth/providers/auth_provider.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:front_genapp/ui/features/animales/providers/animal_provider.dart';
 import 'dart:io';
 
 class ReportesScreen extends ConsumerWidget {
@@ -26,14 +26,14 @@ class ReportesScreen extends ConsumerWidget {
                     icon: Icons.table_chart,
                     title: 'Exportar CSV',
                     subtitle: 'Lista completa de animales en formato CSV',
-                    onPressed: () => _descargar(context, 'csv'),
+                    onPressed: () => _descargar(ref, context, 'csv'),
                   ),
                   const SizedBox(height: 12),
                   _ReporteCard(
                     icon: Icons.picture_as_pdf,
                     title: 'Exportar PDF',
                     subtitle: 'Lista completa de animales en formato PDF',
-                    onPressed: () => _descargar(context, 'pdf'),
+                    onPressed: () => _descargar(ref, context, 'pdf'),
                   ),
                 ],
               )
@@ -60,9 +60,9 @@ class ReportesScreen extends ConsumerWidget {
     );
   }
 
-  Future<void> _descargar(BuildContext context, String format) async {
+  Future<void> _descargar(WidgetRef ref, BuildContext context, String format) async {
     try {
-      final api = ApiService();
+      final api = ref.read(animalRepositoryProvider);
       final dir = await getApplicationDocumentsDirectory();
       final file = File('${dir.path}/animales.$format');
       await api.download('/reporte/animales/?format=$format', file.path);

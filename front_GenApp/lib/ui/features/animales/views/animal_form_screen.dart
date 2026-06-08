@@ -48,7 +48,13 @@ class _AnimalFormScreenState extends ConsumerState<AnimalFormScreen> {
     try {
       final repo = ref.read(animalRepositoryProvider);
       _candidatos = await repo.getCandidatos();
-    } catch (_) {}
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error al cargar candidatos: $e')),
+        );
+      }
+    }
     if (mounted) setState(() => _loadingCandidatos = false);
   }
 
