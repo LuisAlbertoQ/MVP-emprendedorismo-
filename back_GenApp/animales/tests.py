@@ -124,8 +124,10 @@ class AnimalCRUDTests(APITestCase):
             'padre': uid_padre, 'madre': uid_madre
         }, format='json')
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        self.assertEqual(response.data.get('padre'), uid_padre)
-        self.assertEqual(response.data.get('madre'), uid_madre)
+        self.assertEqual(response.data.get('padre'), 'PADRE-01')
+        self.assertEqual(response.data.get('madre'), 'MADRE-01')
+        self.assertEqual(response.data.get('padre_uid'), uid_padre)
+        self.assertEqual(response.data.get('madre_uid'), uid_madre)
 
     def test_list_animals(self):
         self._create_animal()

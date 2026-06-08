@@ -15,7 +15,10 @@ class UidToAnimalField(serializers.Field):
             raise serializers.ValidationError('UID inválido')
 
     def to_representation(self, value):
-        return str(value.uid) if value else None
+        if value is None:
+            return None
+        nombre = f' - {value.nombre}' if value.nombre else ''
+        return f'{value.arete}{nombre}'
 
 
 class AnimalSerializer(serializers.ModelSerializer):
@@ -108,6 +111,12 @@ class SyncOutputAnimalSerializer(serializers.ModelSerializer):
             'nombre', 'raza', 'padre_uid', 'madre_uid',
             'observaciones', 'activo', 'sync_status', 'updated_at', 'deleted_at'
         ]
+
+
+class CandidatoSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Animal
+        fields = ['uid', 'arete', 'nombre', 'especie', 'sexo']
 
 
 class ReporteSerializer(serializers.Serializer):

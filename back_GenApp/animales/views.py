@@ -31,7 +31,7 @@ class PDFRenderer(BaseRenderer):
 
 from .models import Animal, SyncStatus
 from .serializers import (
-    AnimalSerializer, AnimalListSerializer,
+    AnimalSerializer, AnimalListSerializer, CandidatoSerializer,
     SyncInputSerializer, SyncOutputAnimalSerializer,
     ReporteSerializer
 )
@@ -51,6 +51,8 @@ class AnimalViewSet(viewsets.ModelViewSet):
     def get_serializer_class(self):
         if self.action == 'list':
             return AnimalListSerializer
+        if self.action == 'candidatos':
+            return CandidatoSerializer
         return AnimalSerializer
 
     def get_queryset(self):
@@ -110,6 +112,34 @@ class AnimalViewSet(viewsets.ModelViewSet):
 
         tree = build_tree(animal)
         return Response(tree)
+
+    @action(detail=False, methods=['get'])
+    def candidatos(self, request):
+        queryset = Animal.objects.filter(
+            usuario=request.user, activo=True
+        ).values('uid', 'arete', 'nombre', 'especie', 'sexo').order_by('arete')
+        return Response(list(queryset))
+
+    @action(detail=False, methods=['get'])
+    def resumen(self, request):
+        qs = Animal.objects.filter(usuario=request.user, activo=True)
+        total = qs.count()
+        machos = qs.filter(sexo='macho').count()
+        hembras = qs.filter(sexo='hembra').count()
+        alpaca = qs.filter(especie='alpaca').count()
+        llama = qs.filter(especie='llama').count()
+        ovino = qs.filter(especie='ovino').count()
+        user = request.user
+        return Response({
+            'total': total,
+            'machos': machos,
+            'hembras': hembras,
+            'alpaca': alpaca,
+            'llama': llama,
+            'ovino': ovino,
+            'plan': user.plan,
+            'limite': user.limite_animales,
+        })
 
 
 class SyncView(APIView):
