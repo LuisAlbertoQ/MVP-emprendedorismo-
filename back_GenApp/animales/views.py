@@ -125,8 +125,12 @@ class AnimalViewSet(viewsets.ModelViewSet):
     def candidatos(self, request):
         queryset = Animal.objects.filter(
             usuario=request.user, activo=True
-        ).values('uid', 'arete', 'nombre', 'especie', 'sexo').order_by('arete')
-        return Response(list(queryset))
+        ).order_by('arete')
+        especie = request.query_params.get('especie')
+        if especie:
+            queryset = queryset.filter(especie=especie)
+        serializer = CandidatoSerializer(queryset, many=True)
+        return Response(serializer.data)
 
     @action(detail=False, methods=['get'])
     def resumen(self, request):
