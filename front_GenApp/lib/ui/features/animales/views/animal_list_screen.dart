@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
-import 'package:front_genapp/data/models/animal_model.dart';
+import 'package:front_genapp/data/models/animal_model.dart' show AnimalListModel, categoriaEdadLabel;
 import 'package:front_genapp/ui/core/constants.dart';
 import 'package:front_genapp/ui/core/theme.dart';
 import 'package:front_genapp/ui/features/animales/providers/animal_provider.dart';
@@ -395,76 +395,132 @@ class _OptionSheet extends StatelessWidget {
   }
 }
 
-class _AnimalCard extends StatelessWidget {
+class _AnimalCard extends ConsumerWidget {
   final AnimalListModel animal;
   const _AnimalCard({required this.animal});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final dateStr = DateFormat('dd/MM/yyyy').format(animal.fechaNacimiento);
     final isMale = animal.sexo == 'macho';
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: () => context.push(AppRoutes.animalDetalle(animal.uid)),
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Row(
-            children: [
-              Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  color: isMale
-                      ? Colors.blue.shade50
-                      : Colors.pink.shade50,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(
-                  isMale ? Icons.male : Icons.female,
-                  color: isMale ? Colors.blue : Colors.pink,
-                ),
+    return Dismissible(
+      key: ValueKey(animal.uid),
+      direction: DismissDirection.endToStart,
+      confirmDismiss: (_) async {
+        final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Eliminar animal'),
+            content: Text(
+              '¿Eliminar "${animal.nombre.isNotEmpty ? '${animal.arete} - ${animal.nombre}' : animal.arete}"?',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancelar'),
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      animal.nombre.isNotEmpty
-                          ? '${animal.arete} - ${animal.nombre}'
-                          : animal.arete,
-                      style: theme.textTheme.titleSmall
-                          ?.copyWith(fontWeight: FontWeight.w600),
-                    ),
-                    const SizedBox(height: 2),
-                    Row(
-                      children: [
-                        _Tag(
-                          text: _especieLabel(animal.especie),
-                          color: AppTheme.primaryLight,
-                        ),
-                        const SizedBox(width: 6),
-                        _Tag(
-                          text: isMale ? 'Macho' : 'Hembra',
-                          color: isMale ? Colors.blue : Colors.pink,
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          dateStr,
-                          style: theme.textTheme.bodySmall
-                              ?.copyWith(color: Colors.grey),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                style: TextButton.styleFrom(foregroundColor: Colors.red),
+                child: const Text('Eliminar'),
               ),
-              Icon(Icons.chevron_right, color: Colors.grey.shade400),
             ],
+          ),
+        );
+        return confirmed ?? false;
+      },
+      onDismissed: (_) async {
+        try {
+          await ref.read(animalRepositoryProvider).deleteAnimal(animal.uid);
+          ref.read(animalListProvider.notifier).loadAnimales(refresh: true);
+          ref.invalidate(resumenProvider);
+        } catch (e) {
+          ref.read(animalListProvider.notifier).loadAnimales(refresh: true);
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Error al eliminar: $e')),
+            );
+          }
+        }
+      },
+      background: Container(
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 20),
+        margin: const EdgeInsets.only(bottom: 8),
+        decoration: BoxDecoration(
+          color: Colors.red.shade500,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: const Icon(Icons.delete, color: Colors.white),
+      ),
+      child: Card(
+        margin: const EdgeInsets.only(bottom: 8),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: () => context.push(AppRoutes.animalDetalle(animal.uid)),
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Row(
+              children: [
+                Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: isMale
+                        ? Colors.blue.shade50
+                        : Colors.pink.shade50,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(
+                    isMale ? Icons.male : Icons.female,
+                    color: isMale ? Colors.blue : Colors.pink,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        animal.nombre.isNotEmpty
+                            ? '${animal.arete} - ${animal.nombre}'
+                            : animal.arete,
+                        style: theme.textTheme.titleSmall
+                            ?.copyWith(fontWeight: FontWeight.w600),
+                      ),
+                      const SizedBox(height: 2),
+                      Row(
+                        children: [
+                          _Tag(
+                            text: _especieLabel(animal.especie),
+                            color: AppTheme.primaryLight,
+                          ),
+                          const SizedBox(width: 6),
+                          _Tag(
+                            text: isMale ? 'Macho' : 'Hembra',
+                            color: isMale ? Colors.blue : Colors.pink,
+                          ),
+                          const SizedBox(width: 6),
+                          _Tag(
+                            text: categoriaEdadLabel(animal.categoriaEdad),
+                            color: Colors.teal,
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            dateStr,
+                            style: theme.textTheme.bodySmall
+                                ?.copyWith(color: Colors.grey),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(Icons.chevron_right, color: Colors.grey.shade400),
+              ],
+            ),
           ),
         ),
       ),

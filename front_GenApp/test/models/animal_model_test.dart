@@ -22,6 +22,7 @@ void main() {
         'sync_status': 'sincronizado',
         'created_at': '2024-01-15T10:00:00Z',
         'updated_at': '2024-06-01T10:00:00Z',
+        'categoria_edad': 'adulto',
       };
 
       final model = AnimalModel.fromJson(json);
@@ -41,6 +42,7 @@ void main() {
       expect(model.observaciones, 'Sano');
       expect(model.activo, true);
       expect(model.syncStatus, 'sincronizado');
+      expect(model.categoriaEdad, 'adulto');
       expect(model.createdAt, DateTime.utc(2024, 1, 15, 10, 0, 0));
       expect(model.updatedAt, DateTime.utc(2024, 6, 1, 10, 0, 0));
     });
@@ -100,7 +102,7 @@ void main() {
       expect(json['activo'], true);
     });
 
-    test('toJson omits null parent UIDs', () {
+    test('toJson includes null parent UIDs', () {
       final model = AnimalModel(
         uid: 'abc-123',
         arete: 'HIJO-001',
@@ -111,8 +113,10 @@ void main() {
 
       final json = model.toJson();
 
-      expect(json.containsKey('padre'), false);
-      expect(json.containsKey('madre'), false);
+      expect(json.containsKey('padre'), true);
+      expect(json['padre'], isNull);
+      expect(json.containsKey('madre'), true);
+      expect(json['madre'], isNull);
     });
   });
 
@@ -126,6 +130,7 @@ void main() {
         'sexo': 'macho',
         'fecha_nacimiento': '2024-01-15',
         'foto': null,
+        'categoria_edad': 'tui_mayor',
       };
 
       final model = AnimalListModel.fromJson(json);
@@ -137,6 +142,7 @@ void main() {
       expect(model.sexo, 'macho');
       expect(model.fechaNacimiento, DateTime(2024, 1, 15));
       expect(model.foto, isNull);
+      expect(model.categoriaEdad, 'tui_mayor');
     });
 
     test('fromJson handles missing nombre', () {

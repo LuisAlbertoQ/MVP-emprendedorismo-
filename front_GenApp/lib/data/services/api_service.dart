@@ -115,6 +115,16 @@ class ApiService {
     return response.data as Map<String, dynamic>;
   }
 
+  Future<Map<String, dynamic>> patchMultipart(
+      String path, Map<String, dynamic> fields, String filePath) async {
+    final formData = FormData.fromMap({
+      ...fields,
+      'foto': await MultipartFile.fromFile(filePath),
+    });
+    final response = await _dio.patch(path, data: formData);
+    return response.data as Map<String, dynamic>;
+  }
+
   Future<void> delete(String path) async {
     await _dio.delete(path);
   }

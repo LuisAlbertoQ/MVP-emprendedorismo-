@@ -19,24 +19,29 @@ class PerfilScreen extends ConsumerWidget {
     }
 
     return Scaffold(
-      body: CustomScrollView(
-        slivers: [
-          _Header(user: user),
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-            sliver: SliverList(
-              delegate: SliverChildListDelegate([
-                const SizedBox(height: 16),
-                _PlanCard(user: user),
-                const SizedBox(height: 16),
-                _InfoCard(user: user),
-                const SizedBox(height: 16),
-                _LogoutButton(),
-                const SizedBox(height: 32),
-              ]),
+      body: RefreshIndicator(
+        onRefresh: () async {
+          await ref.read(authProvider.notifier).loadPerfil();
+        },
+        child: CustomScrollView(
+          slivers: [
+            _Header(user: user),
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              sliver: SliverList(
+                delegate: SliverChildListDelegate([
+                  const SizedBox(height: 16),
+                  _PlanCard(user: user),
+                  const SizedBox(height: 16),
+                  _InfoCard(user: user),
+                  const SizedBox(height: 16),
+                  _LogoutButton(),
+                  const SizedBox(height: 32),
+                ]),
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

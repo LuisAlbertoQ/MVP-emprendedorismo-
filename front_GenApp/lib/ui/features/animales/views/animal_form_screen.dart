@@ -1,6 +1,9 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:dio/dio.dart';
 import 'package:front_genapp/data/models/animal_model.dart';
 import 'package:front_genapp/ui/core/constants.dart';
 import 'package:front_genapp/ui/core/widgets/loading_button.dart';
@@ -32,6 +35,10 @@ class _AnimalFormScreenState extends ConsumerState<AnimalFormScreen> {
   List<CandidatoModel> _candidatos = [];
   bool _loadingCandidatos = false;
 
+  String? _fotoPath;
+  final _picker = ImagePicker();
+  Map<String, String> _fieldErrors = {};
+
   bool get _isEditing => widget.uid != null;
 
   @override
@@ -59,22 +66,32 @@ class _AnimalFormScreenState extends ConsumerState<AnimalFormScreen> {
   }
 
   Future<void> _loadAnimal() async {
-    final animal =
-        await ref.read(animalRepositoryProvider).getAnimal(widget.uid!);
-    _areteCtrl.text = animal.arete;
-    _nombreCtrl.text = animal.nombre;
-    _razaCtrl.text = animal.raza;
-    _obsCtrl.text = animal.observaciones;
-    _especie = animal.especie;
-    _sexo = animal.sexo;
-    _fechaNac = animal.fechaNacimiento;
-    if (animal.padreUid != null) {
-      _padre = _candidatos.where((c) => c.uid == animal.padreUid).firstOrNull;
+    try {
+      final animal =
+          await ref.read(animalRepositoryProvider).getAnimal(widget.uid!);
+      _areteCtrl.text = animal.arete;
+      _nombreCtrl.text = animal.nombre;
+      _razaCtrl.text = animal.raza;
+      _obsCtrl.text = animal.observaciones;
+      _especie = animal.especie;
+      _sexo = animal.sexo;
+      _fechaNac = animal.fechaNacimiento;
+      if (animal.padreUid != null) {
+        _padre =
+            _candidatos.where((c) => c.uid == animal.padreUid).firstOrNull;
+      }
+      if (animal.madreUid != null) {
+        _madre =
+            _candidatos.where((c) => c.uid == animal.madreUid).firstOrNull;
+      }
+      if (mounted) setState(() {});
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error al cargar animal: $e')),
+        );
+      }
     }
-    if (animal.madreUid != null) {
-      _madre = _candidatos.where((c) => c.uid == animal.madreUid).firstOrNull;
-    }
-    if (mounted) setState(() {});
   }
 
   @override
@@ -96,9 +113,21 @@ class _AnimalFormScreenState extends ConsumerState<AnimalFormScreen> {
     if (picked != null) setState(() => _fechaNac = picked);
   }
 
+  Future<void> _pickFoto() async {
+    final xfile = await _picker.pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 1024,
+      maxHeight: 1024,
+    );
+    if (xfile != null) setState(() => _fotoPath = xfile.path);
+  }
+
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
-    setState(() => _saving = true);
+    setState(() {
+      _saving = true;
+      _fieldErrors = {};
+    });
     try {
       final animal = AnimalModel(
         uid: '',
@@ -113,17 +142,35 @@ class _AnimalFormScreenState extends ConsumerState<AnimalFormScreen> {
         observaciones: _obsCtrl.text.trim(),
       );
       final repo = ref.read(animalRepositoryProvider);
+      String uid;
       if (_isEditing) {
         await repo.updateAnimal(widget.uid!, animal);
+        uid = widget.uid!;
       } else {
-        await repo.createAnimal(animal);
+        final created = await repo.createAnimal(animal);
+        uid = created.uid;
+      }
+      if (_fotoPath != null) {
+        try {
+          await repo.subirFoto(uid, _fotoPath!);
+        } catch (_) {}
       }
       if (mounted) {
         ref.read(animalListProvider.notifier).loadAnimales(refresh: true);
+        ref.invalidate(animalDetailProvider(uid));
+        ref.invalidate(animalArbolProvider(uid));
+        ref.invalidate(resumenProvider);
         context.pop();
       }
     } catch (e) {
-      if (mounted) {
+      if (e is DioException && e.response?.data is Map) {
+        final errors = e.response!.data as Map<String, dynamic>;
+        setState(() {
+          _fieldErrors = errors.map(
+              (k, v) => MapEntry(k, v is List ? v.first.toString() : v.toString()));
+        });
+      }
+      if (mounted && _fieldErrors.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Error: $e')),
         );
@@ -147,9 +194,10 @@ class _AnimalFormScreenState extends ConsumerState<AnimalFormScreen> {
             children: [
               TextFormField(
                 controller: _areteCtrl,
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   labelText: 'Arete *',
-                  prefixIcon: Icon(Icons.tag),
+                  prefixIcon: const Icon(Icons.tag),
+                  errorText: _fieldErrors['arete'],
                 ),
                 validator: (v) =>
                     v != null && v.trim().isNotEmpty ? null : 'Requerido',
@@ -191,9 +239,10 @@ class _AnimalFormScreenState extends ConsumerState<AnimalFormScreen> {
               InkWell(
                 onTap: _selectDate,
                 child: InputDecorator(
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     labelText: 'Fecha de Nacimiento *',
-                    prefixIcon: Icon(Icons.calendar_today),
+                    prefixIcon: const Icon(Icons.calendar_today),
+                    errorText: _fieldErrors['fecha_nacimiento'],
                   ),
                   child: Text(
                     '${_fechaNac.day}/${_fechaNac.month}/${_fechaNac.year}',
@@ -212,6 +261,7 @@ class _AnimalFormScreenState extends ConsumerState<AnimalFormScreen> {
               _ParentSelector(
                 label: 'Padre',
                 icon: Icons.male,
+                errorText: _fieldErrors['padre'],
                 candidatos: _candidatos,
                 selected: _padre,
                 loading: _loadingCandidatos,
@@ -221,10 +271,17 @@ class _AnimalFormScreenState extends ConsumerState<AnimalFormScreen> {
               _ParentSelector(
                 label: 'Madre',
                 icon: Icons.female,
+                errorText: _fieldErrors['madre'],
                 candidatos: _candidatos,
                 selected: _madre,
                 loading: _loadingCandidatos,
                 onSelected: (c) => setState(() => _madre = c),
+              ),
+              const SizedBox(height: 16),
+              _FotoPicker(
+                path: _fotoPath,
+                onPick: _pickFoto,
+                onClear: () => setState(() => _fotoPath = null),
               ),
               const SizedBox(height: 16),
               TextFormField(
@@ -252,6 +309,7 @@ class _AnimalFormScreenState extends ConsumerState<AnimalFormScreen> {
 class _ParentSelector extends StatelessWidget {
   final String label;
   final IconData icon;
+  final String? errorText;
   final List<CandidatoModel> candidatos;
   final CandidatoModel? selected;
   final bool loading;
@@ -260,6 +318,7 @@ class _ParentSelector extends StatelessWidget {
   const _ParentSelector({
     required this.label,
     required this.icon,
+    this.errorText,
     required this.candidatos,
     required this.selected,
     required this.loading,
@@ -275,6 +334,7 @@ class _ParentSelector extends StatelessWidget {
         decoration: InputDecoration(
           labelText: label,
           prefixIcon: Icon(icon),
+          errorText: errorText,
           suffixIcon: selected != null
               ? IconButton(
                   icon: const Icon(Icons.close),
@@ -418,6 +478,63 @@ class _ParentSearchSheetState extends State<_ParentSearchSheet> {
           ),
         );
       },
+    );
+  }
+}
+
+class _FotoPicker extends StatelessWidget {
+  final String? path;
+  final VoidCallback onPick;
+  final VoidCallback onClear;
+
+  const _FotoPicker({
+    required this.path,
+    required this.onPick,
+    required this.onClear,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onPick,
+      borderRadius: BorderRadius.circular(12),
+      child: InputDecorator(
+        decoration: InputDecoration(
+          labelText: 'Foto',
+          prefixIcon: const Icon(Icons.camera_alt),
+          suffixIcon: path != null
+              ? IconButton(
+                  icon: const Icon(Icons.close),
+                  onPressed: onClear,
+                )
+              : null,
+        ),
+        child: Row(
+          children: [
+            if (path != null)
+              ClipRRect(
+                borderRadius: BorderRadius.circular(6),
+                child: Image.file(
+                  File(path!),
+                  width: 48,
+                  height: 48,
+                  fit: BoxFit.cover,
+                ),
+              ),
+            if (path != null) const SizedBox(width: 12),
+            Text(
+              path != null
+                  ? path!.split('/').last
+                  : 'Toca para seleccionar foto',
+              style: TextStyle(
+                color: path != null ? null : Colors.grey,
+                fontSize: 14,
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

@@ -30,6 +30,7 @@ class PDFRenderer(BaseRenderer):
         return data
 
 from .models import Animal, SyncStatus
+from .utils import calcular_categoria_edad
 from .serializers import (
     AnimalSerializer, AnimalListSerializer, CandidatoSerializer,
     SyncInputSerializer, SyncOutputAnimalSerializer,
@@ -110,6 +111,7 @@ class AnimalViewSet(viewsets.ModelViewSet):
                 'sexo': a.sexo,
                 'fecha_nacimiento': a.fecha_nacimiento.isoformat() if a.fecha_nacimiento else None,
                 'foto': request.build_absolute_uri(a.foto.url) if a.foto else None,
+                'categoria_edad': calcular_categoria_edad(a.especie, a.fecha_nacimiento),
             }
             if depth < max_generations:
                 node['padre'] = build_tree(a.padre, depth + 1) if a.padre else None

@@ -1,6 +1,8 @@
+from datetime import date
 from rest_framework import serializers
 from django.db import IntegrityError
 from .models import Animal, Especie, Sexo
+from .utils import calcular_categoria_edad
 
 
 class UidToAnimalField(serializers.Field):
@@ -26,6 +28,7 @@ class AnimalSerializer(serializers.ModelSerializer):
     madre_uid = serializers.UUIDField(source='madre.uid', read_only=True, allow_null=True)
     padre = UidToAnimalField(required=False, allow_null=True)
     madre = UidToAnimalField(required=False, allow_null=True)
+    categoria_edad = serializers.SerializerMethodField()
 
     class Meta:
         model = Animal
@@ -33,9 +36,17 @@ class AnimalSerializer(serializers.ModelSerializer):
             'uid', 'usuario', 'arete', 'especie', 'sexo', 'fecha_nacimiento',
             'nombre', 'raza', 'padre', 'madre', 'padre_uid', 'madre_uid',
             'foto', 'observaciones', 'activo', 'sync_status',
-            'created_at', 'updated_at'
+            'created_at', 'updated_at', 'categoria_edad'
         ]
-        read_only_fields = ['uid', 'usuario', 'sync_status', 'created_at', 'updated_at']
+        read_only_fields = ['uid', 'usuario', 'sync_status', 'created_at', 'updated_at', 'categoria_edad']
+
+    def get_categoria_edad(self, obj):
+        return calcular_categoria_edad(obj.especie, obj.fecha_nacimiento)
+
+    def validate_fecha_nacimiento(self, value):
+        if value > date.today():
+            raise serializers.ValidationError('La fecha de nacimiento no puede ser futura')
+        return value
 
     def validate(self, data):
         usuario = self.context['request'].user
@@ -52,6 +63,27 @@ class AnimalSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError(
                     f'Has alcanzado el límite de {limite} animales de tu plan {usuario.plan}'
                 )
+
+        especie = data.get('especie', self.instance.especie if self.instance else None)
+        padre = data.get('padre', self.instance.padre if self.instance else None)
+        madre = data.get('madre', self.instance.madre if self.instance else None)
+        fecha_nac = data.get('fecha_nacimiento', self.instance.fecha_nacimiento if self.instance else None)
+
+        if padre:
+            if padre.sexo != 'macho':
+                raise serializers.ValidationError({'padre': 'El padre debe ser un animal de sexo macho'})
+            if especie and padre.especie != especie:
+                raise serializers.ValidationError({'padre': f'El padre debe ser de la misma especie ({padre.get_especie_display()} != {dict(Especie.choices).get(especie, especie)})'})
+            if fecha_nac and padre.fecha_nacimiento >= fecha_nac:
+                raise serializers.ValidationError({'padre': 'El padre debe ser mayor que el animal'})
+
+        if madre:
+            if madre.sexo != 'hembra':
+                raise serializers.ValidationError({'madre': 'La madre debe ser un animal de sexo hembra'})
+            if especie and madre.especie != especie:
+                raise serializers.ValidationError({'madre': f'La madre debe ser de la misma especie ({madre.get_especie_display()} != {dict(Especie.choices).get(especie, especie)})'})
+            if fecha_nac and madre.fecha_nacimiento >= fecha_nac:
+                raise serializers.ValidationError({'madre': 'La madre debe ser mayor que el animal'})
 
         return data
 
@@ -74,9 +106,14 @@ class AnimalSerializer(serializers.ModelSerializer):
 
 
 class AnimalListSerializer(serializers.ModelSerializer):
+    categoria_edad = serializers.SerializerMethodField()
+
     class Meta:
         model = Animal
-        fields = ['uid', 'arete', 'nombre', 'especie', 'sexo', 'fecha_nacimiento', 'foto']
+        fields = ['uid', 'arete', 'nombre', 'especie', 'sexo', 'fecha_nacimiento', 'foto', 'categoria_edad']
+
+    def get_categoria_edad(self, obj):
+        return calcular_categoria_edad(obj.especie, obj.fecha_nacimiento)
 
 
 class SyncChangeSerializer(serializers.Serializer):
@@ -103,14 +140,19 @@ class SyncInputSerializer(serializers.Serializer):
 class SyncOutputAnimalSerializer(serializers.ModelSerializer):
     padre_uid = serializers.UUIDField(source='padre.uid', allow_null=True)
     madre_uid = serializers.UUIDField(source='madre.uid', allow_null=True)
+    categoria_edad = serializers.SerializerMethodField()
 
     class Meta:
         model = Animal
         fields = [
             'uid', 'arete', 'especie', 'sexo', 'fecha_nacimiento',
             'nombre', 'raza', 'padre_uid', 'madre_uid',
-            'observaciones', 'activo', 'sync_status', 'updated_at', 'deleted_at'
+            'observaciones', 'activo', 'sync_status', 'updated_at', 'deleted_at',
+            'categoria_edad'
         ]
+
+    def get_categoria_edad(self, obj):
+        return calcular_categoria_edad(obj.especie, obj.fecha_nacimiento)
 
 
 class CandidatoSerializer(serializers.ModelSerializer):

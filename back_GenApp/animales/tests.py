@@ -1,4 +1,5 @@
 import uuid
+from datetime import date, timedelta
 from decimal import Decimal
 from rest_framework.test import APITestCase
 from rest_framework import status
@@ -6,6 +7,7 @@ from django.urls import reverse
 from django.core.exceptions import ValidationError
 from usuarios.models import Usuario
 from .models import Animal, Especie, Sexo, SyncStatus
+from .utils import calcular_categoria_edad
 
 
 class AnimalModelTests(APITestCase):
@@ -374,3 +376,71 @@ class ReporteTests(APITestCase):
         content = response.content.decode('utf-8')
         self.assertIn('A-02', content)
         self.assertNotIn('A-01', content)
+
+
+class CategoriaEdadTests(APITestCase):
+    def test_camelido_cria(self):
+        result = calcular_categoria_edad('alpaca', date.today() - timedelta(days=120))
+        self.assertEqual(result, 'cría')
+
+    def test_camelido_tui_menor(self):
+        result = calcular_categoria_edad('alpaca', date.today() - timedelta(days=300))
+        self.assertEqual(result, 'tui_menor')
+
+    def test_camelido_tui_mayor(self):
+        result = calcular_categoria_edad('llama', date.today() - timedelta(days=540))
+        self.assertEqual(result, 'tui_mayor')
+
+    def test_camelido_adulto(self):
+        result = calcular_categoria_edad('alpaca', date.today() - timedelta(days=1095))
+        self.assertEqual(result, 'adulto')
+
+    def test_ovino_cria(self):
+        result = calcular_categoria_edad('ovino', date.today() - timedelta(days=60))
+        self.assertEqual(result, 'cría')
+
+    def test_ovino_borrego(self):
+        result = calcular_categoria_edad('ovino', date.today() - timedelta(days=300))
+        self.assertEqual(result, 'borrego')
+
+    def test_ovino_adulto(self):
+        result = calcular_categoria_edad('ovino', date.today() - timedelta(days=730))
+        self.assertEqual(result, 'adulto')
+
+    def test_none_on_future_date(self):
+        result = calcular_categoria_edad('alpaca', date.today() + timedelta(days=1))
+        self.assertIsNone(result)
+
+    def test_none_on_empty_fecha(self):
+        result = calcular_categoria_edad('alpaca', None)
+        self.assertIsNone(result)
+
+    def test_categoria_included_in_detail_response(self):
+        Usuario.objects.create_user(
+            username='999888778', telefono='999888778', password='123456'
+        )
+        self.client.force_authenticate(user=Usuario.objects.get(telefono='999888778'))
+        animal = Animal.objects.create(
+            arete='CAT-01', especie='alpaca', sexo='macho',
+            fecha_nacimiento=date.today() - timedelta(days=1095),
+            usuario=Usuario.objects.get(telefono='999888778')
+        )
+        response = self.client.get(reverse('animal-detail', kwargs={'pk': animal.uid}))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn('categoria_edad', response.data)
+        self.assertEqual(response.data['categoria_edad'], 'adulto')
+
+    def test_categoria_included_in_list_response(self):
+        Usuario.objects.create_user(
+            username='999888779', telefono='999888779', password='123456'
+        )
+        self.client.force_authenticate(user=Usuario.objects.get(telefono='999888779'))
+        Animal.objects.create(
+            arete='CAT-L-01', especie='ovino', sexo='hembra',
+            fecha_nacimiento=date.today() - timedelta(days=60),
+            usuario=Usuario.objects.get(telefono='999888779')
+        )
+        response = self.client.get(reverse('animal-list'))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn('categoria_edad', response.data['results'][0])
+        self.assertEqual(response.data['results'][0]['categoria_edad'], 'cría')

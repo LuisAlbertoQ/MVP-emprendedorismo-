@@ -17,13 +17,16 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   final _telefonoCtrl = TextEditingController();
   final _nombreCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
+  final _confirmPasswordCtrl = TextEditingController();
   bool _obscure = true;
+  bool _obscureConfirm = true;
 
   @override
   void dispose() {
     _telefonoCtrl.dispose();
     _nombreCtrl.dispose();
     _passwordCtrl.dispose();
+    _confirmPasswordCtrl.dispose();
     super.dispose();
   }
 
@@ -86,6 +89,24 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                   obscureText: _obscure,
                   validator: (v) =>
                       v != null && v.length >= 6 ? null : 'Mínimo 6 caracteres',
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: _confirmPasswordCtrl,
+                  decoration: InputDecoration(
+                    labelText: 'Confirmar Contraseña',
+                    prefixIcon: const Icon(Icons.lock_outline),
+                    suffixIcon: IconButton(
+                      icon: Icon(_obscureConfirm ? Icons.visibility_off : Icons.visibility),
+                      onPressed: () => setState(() => _obscureConfirm = !_obscureConfirm),
+                    ),
+                  ),
+                  obscureText: _obscureConfirm,
+                  validator: (v) {
+                    if (v == null || v.isEmpty) return 'Confirme su contraseña';
+                    if (v != _passwordCtrl.text) return 'Las contraseñas no coinciden';
+                    return null;
+                  },
                 ),
                 const SizedBox(height: 24),
                 LoadingButton(

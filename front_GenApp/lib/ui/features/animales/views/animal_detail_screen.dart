@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
-import 'package:front_genapp/data/models/animal_model.dart';
+import 'package:front_genapp/ui/features/animales/providers/animal_provider.dart';
+import 'package:front_genapp/data/models/animal_model.dart' show AnimalModel, categoriaEdadLabel;
 import 'package:front_genapp/ui/core/constants.dart';
 import 'package:front_genapp/ui/core/theme.dart';
-import 'package:front_genapp/ui/features/animales/providers/animal_provider.dart';
 
 class AnimalDetailScreen extends ConsumerWidget {
   final String uid;
@@ -122,17 +122,6 @@ class _Header extends StatelessWidget {
           ),
         ),
       ),
-      actions: [
-        IconButton(
-          icon: const Icon(Icons.account_tree),
-          tooltip: 'Árbol genealógico',
-          onPressed: () => context.push(AppRoutes.animalArbol(animal.uid)),
-        ),
-        IconButton(
-          icon: const Icon(Icons.edit),
-          onPressed: () => context.push(AppRoutes.animalEditar(animal.uid)),
-        ),
-      ],
     );
   }
 }
@@ -184,6 +173,11 @@ class _InfoSection extends StatelessWidget {
               icon: Icons.calendar_today,
               label: 'Nacimiento',
               value: DateFormat('dd/MM/yyyy').format(animal.fechaNacimiento),
+            ),
+            _InfoRow(
+              icon: Icons.timeline,
+              label: 'Categoría',
+              value: categoriaEdadLabel(animal.categoriaEdad),
             ),
           ],
         ),
@@ -364,32 +358,89 @@ class _ObservationsCard extends StatelessWidget {
   }
 }
 
-class _ActionButtons extends StatelessWidget {
+class _ActionButtons extends ConsumerWidget {
   final AnimalModel animal;
   const _ActionButtons({required this.animal});
 
   @override
-  Widget build(BuildContext context) {
-    return Row(
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Column(
       children: [
-        Expanded(
-          child: OutlinedButton.icon(
-            onPressed: () =>
-                context.push(AppRoutes.animalArbol(animal.uid)),
-            icon: const Icon(Icons.account_tree),
-            label: const Text('Árbol'),
-          ),
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: () =>
+                    context.push(AppRoutes.animalArbol(animal.uid)),
+                icon: const Icon(Icons.account_tree),
+                label: const Text('Árbol'),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: () =>
+                    context.push(AppRoutes.animalEditar(animal.uid)),
+                icon: const Icon(Icons.edit),
+                label: const Text('Editar'),
+              ),
+            ),
+          ],
         ),
-        const SizedBox(width: 12),
-        Expanded(
+        const SizedBox(height: 12),
+        SizedBox(
+          width: double.infinity,
           child: OutlinedButton.icon(
-            onPressed: () =>
-                context.push(AppRoutes.animalEditar(animal.uid)),
-            icon: const Icon(Icons.edit),
-            label: const Text('Editar'),
+            onPressed: () => _confirmDelete(context, ref),
+            icon: const Icon(Icons.delete_outline, size: 18),
+            label: const Text('Eliminar'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: Colors.red.shade400,
+              side: BorderSide(color: Colors.red.shade200),
+            ),
           ),
         ),
       ],
+    );
+  }
+
+  void _confirmDelete(BuildContext context, WidgetRef ref) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Eliminar animal'),
+        content: Text(
+            '¿Estás seguro de eliminar a "${animal.nombre.isNotEmpty ? '${animal.arete} - ${animal.nombre}' : animal.arete}"?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              try {
+                await ref.read(animalRepositoryProvider).deleteAnimal(animal.uid);
+                if (context.mounted) {
+                  ref.read(animalListProvider.notifier).loadAnimales(refresh: true);
+                  ref.invalidate(animalDetailProvider(animal.uid));
+                  ref.invalidate(animalArbolProvider(animal.uid));
+                  ref.invalidate(resumenProvider);
+                  context.pop();
+                }
+              } catch (e) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Error al eliminar: $e')),
+                  );
+                }
+              }
+            },
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Eliminar'),
+          ),
+        ],
+      ),
     );
   }
 }

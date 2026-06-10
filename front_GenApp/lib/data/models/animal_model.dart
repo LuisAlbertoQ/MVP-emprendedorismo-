@@ -16,6 +16,7 @@ class AnimalModel {
   final String syncStatus;
   final DateTime? createdAt;
   final DateTime? updatedAt;
+  final String? categoriaEdad;
 
   AnimalModel({
     required this.uid,
@@ -35,6 +36,7 @@ class AnimalModel {
     this.syncStatus = 'sincronizado',
     this.createdAt,
     this.updatedAt,
+    this.categoriaEdad,
   });
 
   factory AnimalModel.fromJson(Map<String, dynamic> json) {
@@ -60,6 +62,7 @@ class AnimalModel {
       updatedAt: json['updated_at'] != null
           ? DateTime.tryParse(json['updated_at'] as String)
           : null,
+      categoriaEdad: json['categoria_edad'] as String?,
     );
   }
 
@@ -71,8 +74,8 @@ class AnimalModel {
       'fecha_nacimiento': fechaNacimiento.toIso8601String().split('T').first,
       'nombre': nombre,
       'raza': raza,
-      if (padreUid != null) 'padre': padreUid,
-      if (madreUid != null) 'madre': madreUid,
+      'padre': padreUid,
+      'madre': madreUid,
       'observaciones': observaciones,
       'activo': activo,
     };
@@ -87,6 +90,7 @@ class AnimalListModel {
   final String sexo;
   final DateTime fechaNacimiento;
   final String? foto;
+  final String? categoriaEdad;
 
   AnimalListModel({
     required this.uid,
@@ -96,6 +100,7 @@ class AnimalListModel {
     required this.sexo,
     required this.fechaNacimiento,
     this.foto,
+    this.categoriaEdad,
   });
 
   factory AnimalListModel.fromJson(Map<String, dynamic> json) {
@@ -107,6 +112,7 @@ class AnimalListModel {
       sexo: json['sexo'] as String,
       fechaNacimiento: DateTime.parse(json['fecha_nacimiento'] as String),
       foto: json['foto'] as String?,
+      categoriaEdad: json['categoria_edad'] as String?,
     );
   }
 }
@@ -137,6 +143,23 @@ class CandidatoModel {
   }
 
   String get label => nombre.isNotEmpty ? '$arete - $nombre' : arete;
+}
+
+String categoriaEdadLabel(String? categoria) {
+  switch (categoria) {
+    case 'cría':
+      return 'Cría';
+    case 'tui_menor':
+      return 'Tui Menor';
+    case 'tui_mayor':
+      return 'Tui Mayor';
+    case 'borrego':
+      return 'Borrego';
+    case 'adulto':
+      return 'Adulto';
+    default:
+      return '—';
+  }
 }
 
 class ArbolNode {

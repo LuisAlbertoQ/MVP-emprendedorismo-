@@ -61,4 +61,8 @@ class AnimalRepository {
   Future<void> download(String path, String savePath) async {
     await _api.download(path, savePath);
   }
+
+  Future<void> subirFoto(String uid, String filePath) async {
+    await _api.patchMultipart('/animales/$uid/', {}, filePath);
+  }
 }
