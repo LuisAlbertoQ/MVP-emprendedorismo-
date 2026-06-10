@@ -4,8 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:dio/dio.dart';
-import 'package:front_genapp/data/models/animal_model.dart';
+import 'package:front_genapp/data/models/animal_model.dart' show AnimalModel, CandidatoModel, categoriaEdadLabel;
 import 'package:front_genapp/ui/core/constants.dart';
+import 'package:front_genapp/ui/core/theme.dart';
 import 'package:front_genapp/ui/core/widgets/loading_button.dart';
 import 'package:front_genapp/ui/features/animales/providers/animal_provider.dart';
 
@@ -389,6 +390,7 @@ class _ParentSearchSheet extends StatefulWidget {
 
 class _ParentSearchSheetState extends State<_ParentSearchSheet> {
   final _searchCtrl = TextEditingController();
+  String? _especieFiltro;
 
   @override
   void dispose() {
@@ -396,16 +398,30 @@ class _ParentSearchSheetState extends State<_ParentSearchSheet> {
     super.dispose();
   }
 
+  List<CandidatoModel> get _baseList {
+    var list = widget.candidatos;
+    if (_especieFiltro != null) {
+      list = list.where((c) => c.especie == _especieFiltro).toList();
+    }
+    return list;
+  }
+
   void _filter(String query) {
+    final base = _baseList;
     if (query.isEmpty) {
-      widget.filtered.value = widget.candidatos;
+      widget.filtered.value = base;
       return;
     }
     final lower = query.toLowerCase();
-    widget.filtered.value = widget.candidatos.where((c) {
+    widget.filtered.value = base.where((c) {
       return c.arete.toLowerCase().contains(lower) ||
           c.nombre.toLowerCase().contains(lower);
     }).toList();
+  }
+
+  void _setEspecie(String? especie) {
+    setState(() => _especieFiltro = especie);
+    _filter(_searchCtrl.text);
   }
 
   @override
@@ -431,6 +447,34 @@ class _ParentSearchSheetState extends State<_ParentSearchSheet> {
                 ),
                 onChanged: _filter,
               ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  _EspecieChip(
+                    label: 'Todas',
+                    selected: _especieFiltro == null,
+                    onTap: () => _setEspecie(null),
+                  ),
+                  const SizedBox(width: 6),
+                  _EspecieChip(
+                    label: 'Alpaca',
+                    selected: _especieFiltro == 'alpaca',
+                    onTap: () => _setEspecie('alpaca'),
+                  ),
+                  const SizedBox(width: 6),
+                  _EspecieChip(
+                    label: 'Llama',
+                    selected: _especieFiltro == 'llama',
+                    onTap: () => _setEspecie('llama'),
+                  ),
+                  const SizedBox(width: 6),
+                  _EspecieChip(
+                    label: 'Ovino',
+                    selected: _especieFiltro == 'ovino',
+                    onTap: () => _setEspecie('ovino'),
+                  ),
+                ],
+              ),
               const SizedBox(height: 12),
               Expanded(
                 child: ValueListenableBuilder<List<CandidatoModel>>(
@@ -451,6 +495,7 @@ class _ParentSearchSheetState extends State<_ParentSearchSheet> {
                                 ? 'Llama'
                                 : 'Ovino';
                         final sexo = c.sexo == 'macho' ? 'Macho' : 'Hembra';
+                        final cat = categoriaEdadLabel(c.categoriaEdad);
                         return ListTile(
                           leading: CircleAvatar(
                             backgroundColor: c.sexo == 'macho'
@@ -466,7 +511,7 @@ class _ParentSearchSheetState extends State<_ParentSearchSheet> {
                             ),
                           ),
                           title: Text(c.label),
-                          subtitle: Text('$especie • $sexo'),
+                          subtitle: Text('$especie • $sexo • $cat'),
                           onTap: () => widget.onSelected(c),
                         );
                       },
@@ -478,6 +523,30 @@ class _ParentSearchSheetState extends State<_ParentSearchSheet> {
           ),
         );
       },
+    );
+  }
+}
+
+class _EspecieChip extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _EspecieChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return FilterChip(
+      label: Text(label, style: const TextStyle(fontSize: 12)),
+      selected: selected,
+      onSelected: (_) => onTap(),
+      showCheckmark: false,
+      selectedColor: AppTheme.primaryLight.withValues(alpha: 0.25),
+      visualDensity: VisualDensity.compact,
     );
   }
 }

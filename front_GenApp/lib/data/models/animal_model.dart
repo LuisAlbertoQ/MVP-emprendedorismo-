@@ -123,6 +123,7 @@ class CandidatoModel {
   final String nombre;
   final String especie;
   final String sexo;
+  final String? categoriaEdad;
 
   CandidatoModel({
     required this.uid,
@@ -130,6 +131,7 @@ class CandidatoModel {
     required this.nombre,
     required this.especie,
     required this.sexo,
+    this.categoriaEdad,
   });
 
   factory CandidatoModel.fromJson(Map<String, dynamic> json) {
@@ -139,6 +141,7 @@ class CandidatoModel {
       nombre: json['nombre'] as String? ?? '',
       especie: json['especie'] as String,
       sexo: json['sexo'] as String,
+      categoriaEdad: json['categoria_edad'] as String?,
     );
   }
 
