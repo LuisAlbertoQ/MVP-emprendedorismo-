@@ -1,6 +1,6 @@
 # GeneApp Andina - Backend
 
-API REST para gestión de criadores de alpacas, llamas y ovinos en la región andina.
+API REST para gestión de criadores de alpacas, llamas y ovinos en la región andina. Incluye clasificación etaria automática y validación parental por edad real.
 
 ## Tecnologías
 
@@ -94,21 +94,21 @@ Servidor disponible en: `http://localhost:8000`
 
 | Método | Endpoint | Descripción | Planes |
 |--------|----------|-------------|--------|
-| GET | `/` | Listar (paginado, ?especie=&sexo=&activo=&search=) | Todos |
+| GET | `/` | Listar (paginado, ?especie=&sexo=&activo=&search=) — incluye `categoria_edad` | Todos |
 | POST | `/` | Crear animal | Todos (limite) |
-| GET | `/{uid}/` | Detalle | Todos |
+| GET | `/{uid}/` | Detalle — incluye `categoria_edad` | Todos |
 | PUT | `/{uid}/` | Actualizar (completo) | Todos |
 | PATCH | `/{uid}/` | Actualizar (parcial) | Todos |
 | DELETE | `/{uid}/` | Eliminar (soft delete) | Todos |
-| GET | `/{uid}/arbol/` | Árbol genealógico (2-3 gen) | Todos |
-| GET | `/candidatos/` | Lista para selector de padres | Todos |
+| GET | `/{uid}/arbol/` | Árbol genealógico (2-3 gen) — incluye `categoria_edad` por nodo | Todos |
+| GET | `/candidatos/` | Lista para selector de padres — incluye `categoria_edad`, acepta `?especie=` | Todos |
 | GET | `/resumen/` | Stats (total, machos, hembras, especies) | Todos |
 
 ### Sincronización (prefix: `/api/v1/`)
 
 | Método | Endpoint | Descripción |
 |--------|----------|-------------|
-| POST | `sync/` | Sincronización offline (envía y recibe cambios) |
+| POST | `sync/` | Sincronización offline (envía y recibe cambios) — incluye `categoria_edad` |
 
 ### Reportes (prefix: `/api/v1/reporte/`)
 
@@ -132,13 +132,15 @@ Servidor disponible en: `http://localhost:8000`
 | Perfil de usuario | ✅ Completo |
 | Planes (Gratuito/Básico/Criador) | ✅ Completo |
 | CRUD de animales | ✅ Completo |
-| Validación padre/madre | ✅ Completo |
+| Validación padre/madre (especie, sexo, edad en meses) | ✅ Completo |
+| Categoría de edad automática (cría/tui_menor/tui_mayor/borrego/adulto) | ✅ Completo |
 | Límite de animales por plan | ✅ Completo |
 | Árbol genealógico (2-3 gen) | ✅ Completo |
 | Sincronización offline | ✅ Completo |
 | Reportes CSV/PDF | ✅ Completo |
 | Búsqueda por arete/nombre | ✅ Completo |
 | Filtros (especie, sexo, activo, search) | ✅ Completo |
+| Candidatos con categoría de edad y filtro especie | ✅ Completo |
 | Soft delete | ✅ Completo |
 | Webhook Yape | ⚠️ Stub básico |
 | Notificaciones push | ❌ Futura versión |
@@ -158,7 +160,7 @@ Servidor disponible en: `http://localhost:8000`
 - `arete` - Código único por usuario
 - `especie` - alpaca / llama / ovino
 - `sexo` - hembra / macho
-- `fecha_nacimiento` - Fecha de nacimiento
+- `fecha_nacimiento` - Fecha de nacimiento (usada para calcular categoría de edad)
 - `nombre` - Opcional
 - `raza` - Opcional
 - `padre` / `madre` - Relaciones autopreferenciales
@@ -166,6 +168,16 @@ Servidor disponible en: `http://localhost:8000`
 - `activo` - Borrado lógico
 - `sync_status` - sincronizado / pendiente / error
 - `created_at` / `updated_at` / `deleted_at`
+
+### Categoría de Edad (calculada, no almacenada)
+La categoría se calcula en `animales/utils.py` mediante `calcular_categoria_edad(especie, fecha_nacimiento)`:
+
+| Especie | Cría | Juvenil 1 | Juvenil 2 | Adulto |
+|---------|------|-----------|-----------|--------|
+| Alpaca/Llama | < 8 meses | Tui Menor (8-12m) | Tui Mayor (12-24m) | ≥ 24 meses |
+| Ovino | < 4 meses | Borrego (4-18m) | — | ≥ 18 meses |
+
+Presente en todos los endpoints de animales como campo de solo lectura `categoria_edad`. La validación parental usa meses reales (`_edad_en_meses`) en lugar de comparación directa de fechas.
 
 ## Planes de Suscripción
 
@@ -274,7 +286,7 @@ GET http://localhost:8000/api/v1/reporte/animales/?format=csv
 .\env\Scripts\python.exe manage.py test
 ```
 
-50 tests — modelos, serializers, views, límites por plan, árbol genealógico, validación padre/madre.
+61 tests — modelos, serializers, views, límites por plan, árbol genealógico, validación padre/madre, categoría de edad (11 tests).
 
 ## Estructura del Proyecto
 
@@ -290,8 +302,9 @@ back_GenApp/
 │   └── urls.py           # Rutas de usuarios
 ├── animales/             # App de animales
 │   ├── models.py         # Modelo Animal (con relaciones)
-│   ├── serializers.py    # CRUD, Sync, Reporte serializers
+│   ├── serializers.py    # CRUD, Sync, Reporte serializers (con categoria_edad)
 │   ├── views.py          # AnimalViewSet, SyncView, ReporteView
+│   ├── utils.py          # calcular_categoria_edad, _edad_en_meses
 │   └── urls.py           # Rutas de animales
 ├── env/                  # Entorno virtual Python 3.12
 ├── media/                # Archivos subidos (fotos)

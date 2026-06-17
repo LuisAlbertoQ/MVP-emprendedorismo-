@@ -11,6 +11,7 @@ Aplicación móvil para gestión de criadores de alpacas, llamas y ovinos.
 - **flutter_secure_storage** — tokens JWT almacenados seguros
 - **intl** — formato de fechas
 - **path_provider** — descarga de reportes
+- **image_picker** — selección de fotos desde galería
 
 ## Requisitos
 
@@ -105,15 +106,16 @@ lib/
 - Acciones rápidas: nuevo animal, ver todos, reportes
 
 ### Animales
-- **Lista**: scroll infinito, filtros por especie/sexo, buscador por arete/nombre
-- **Detalle**: header con gradiente, info, padres (tappable), observaciones
-- **Formulario**: crear/editar con selector de padres (buscador modal)
+- **Lista**: scroll infinito, filtros por especie/sexo, buscador por arete/nombre, tag de categoría de edad en cada card, deslizar para eliminar
+- **Detalle**: header con gradiente, info con categoría de edad, padres (tappable), observaciones
+- **Formulario**: crear/editar con selector de padres (buscador modal con filtro por especie y visualización de categoría de edad), carga de fotos, confirmación de contraseña en registro
 - **Árbol**: vista vertical indentada con líneas conectoras
 
 ### Perfil
 - Header con gradiente, avatar, nombre, teléfono
 - Card del plan con barra de progreso y botón cambiar plan
 - Información: generaciones, fecha de registro
+- Pull-to-refresh para recargar datos
 - Cerrar sesión
 
 ### Reportes
@@ -125,8 +127,8 @@ lib/
 flutter test
 ```
 
-27 tests:
-- Modelos: AnimalModel, UserModel, CandidatoModel, ArbolNode (fromJson/toJson)
+27 tests (61 backend + 27 frontend = 88 total):
+- Modelos: AnimalModel (con categoriaEdad), UserModel, CandidatoModel, ArbolNode (fromJson/toJson)
 - Estados: AuthState, AnimalListState (copyWith)
 - Widgets: LoadingButton (idle, loading, disabled)
 - Integración: LoginScreen render cuando no autenticado

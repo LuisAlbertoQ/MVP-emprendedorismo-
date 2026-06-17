@@ -2,6 +2,8 @@
 
 Aplicación móvil + API para que pequeños y medianos criadores de alpacas, llamas y ovinos puedan **digitalizar el registro genealógico de su ganado**, reemplazando las libretas de campo y hojas de cálculo.
 
+> **Nuevo:** Clasificación etaria automática — el sistema calcula la categoría de edad de cada animal (Cría, Tui Menor, Tui Mayor, Borrego, Adulto) en tiempo real según su especie y fecha de nacimiento, sin almacenarla en la base de datos.
+
 ## Problema
 
 Los criadores de la región andina (Perú, Bolivia, Ecuador) enfrentan:
@@ -9,6 +11,7 @@ Los criadores de la región andina (Perú, Bolivia, Ecuador) enfrentan:
 - **Registro manual** en libretas físicas que se pierden o deterioran
 - **Sin control genealógico** — no saben qué animales son padres de cuáles, lo que lleva a cruces consanguíneos indeseados
 - **Sin trazabilidad** — no pueden generar reportes para asociaciones, ferias o certificaciones de raza
+- **Sin clasificación etaria** — no distinguen entre crías, juveniles y adultos para manejo del hato
 - **Sin límites claros** — no saben cuántos animales tienen ni cuándo alcanzaron su capacidad operativa
 - **Sin acceso mobile** — las soluciones existentes son desktop, caras o en inglés
 
@@ -16,10 +19,10 @@ Los criadores de la región andina (Perú, Bolivia, Ecuador) enfrentan:
 
 **GeneApp Andina** es un sistema mobile-first que permite:
 
-1. **Registrar cada animal** con su arete, especie, sexo, raza, fecha de nacimiento y foto
-2. **Asignar padres** a cada animal, construyendo un árbol genealógico de hasta 3 generaciones
+1. **Registrar cada animal** con su arete, especie, sexo, raza, fecha de nacimiento, foto y **categoría de edad calculada automáticamente**
+2. **Asignar padres** a cada animal, construyendo un árbol genealógico de hasta 3 generaciones, con validación por edad real (meses, no fecha comparada)
 3. **Visualizar el árbol genealógico** en pantalla, con indentación vertical para entender la línea familiar
-4. **Buscar y filtrar** animales por especie, sexo o por nombre/arete
+4. **Buscar y filtrar** animales por especie, sexo, categoría de edad o por nombre/arete
 5. **Dashboard** con resumen: total de animales, machos, hembras, desglose por especie
 6. **Planes de suscripción** (Gratuito, Básico, Criador) que controlan el límite de animales
 7. **Reportes** en CSV y PDF exportables (planes pagos)
@@ -68,8 +71,10 @@ Los criadores de la región andina (Perú, Bolivia, Ecuador) enfrentan:
 ### Gestión de animales
 - CRUD completo: crear, ver detalle, editar, eliminar (borrado lógico)
 - Campos: arete, nombre, especie (alpaca/llama/ovino), sexo, raza, fecha de nacimiento, foto, observaciones
-- Asignación de padre y madre desde un buscador modal
+- Asignación de padre y madre desde un buscador modal con filtro por especie y visualización de categoría de edad
 - Validación: el padre debe ser macho, la madre hembra, los padres no pueden ser el mismo animal
+- **Categoría de edad calculada automáticamente** (Cría / Tui Menor / Tui Mayor / Borrego / Adulto) según especie y fecha de nacimiento
+- Validación parental por edad en meses (el padre debe tener más meses que el hijo, no solo fecha posterior)
 
 ### Árbol genealógico
 - Vista vertical indentada con líneas conectoras
@@ -77,9 +82,18 @@ Los criadores de la región andina (Perú, Bolivia, Ecuador) enfrentan:
 - Cada nivel se indentda 24px para legibilidad en pantallas chicas
 - Máximo de generaciones según el plan (2 gratuito, 3 pagos)
 
+### Categoría de edad
+- Calculada en tiempo real desde `fecha_nacimiento` — nunca almacenada en BD
+- Reglas diferenciadas por especie:
+  - **Camélidos** (alpaca/llama): Cría (< 8m), Tui Menor (8-12m), Tui Mayor (12-24m), Adulto (≥ 24m)
+  - **Ovinos**: Cría (< 4m), Borrego (4-18m), Adulto (≥ 18m)
+- Mostrada en detalle, lista (tag teal) y selector de padres
+- La validación parental usa meses de edad en lugar de comparación directa de fechas
+
 ### Búsqueda y filtros
 - Filtros rápidos por especie (Alpaca/Llama/Ovino) y sexo (Macho/Hembra)
 - Buscador textual con debounce de 400ms que busca en arete y nombre
+- Selector de padres con filtro por especie y visualización de categoría de edad
 - Scroll infinito con paginación (20 items por página)
 
 ### Dashboard
@@ -201,12 +215,12 @@ La app apunta a `http://10.0.2.2:8000` (Android emulator). Para iOS físico, cam
 
 ## Tests
 
-### Backend — 50 tests
+### Backend — 61 tests
 ```bash
 cd back_GenApp
 .\env\Scripts\python.exe manage.py test
 ```
-Cubren: modelos, serializers, CRUD, validación padres, límites por plan, árbol genealógico, sincronización.
+Cubren: modelos, serializers, CRUD, validación padres, límites por plan, árbol genealógico, sincronización, categoría de edad (11 tests específicos).
 
 ### Frontend — 27 tests
 ```bash
@@ -226,16 +240,21 @@ Funcionalidades implementadas:
 | Perfil de usuario | ✅ |
 | Planes (Gratuito/Básico/Criador) | ✅ |
 | CRUD de animales | ✅ |
-| Validación padre/madre | ✅ |
+| Validación padre/madre (especie, sexo, edad) | ✅ |
+| Categoría de edad automática | ✅ |
 | Límite de animales por plan | ✅ |
 | Árbol genealógico (2-3 gen) | ✅ |
 | Búsqueda por arete/nombre | ✅ |
-| Filtros (especie, sexo) | ✅ |
+| Filtros (especie, sexo, categoría) | ✅ |
 | Scroll infinito paginado | ✅ |
 | Dashboard con estadísticas | ✅ |
 | Reportes CSV/PDF | ✅ |
 | Sincronización offline | ✅ |
 | Soft delete | ✅ |
+| Carga de fotos | ✅ |
+| Confirmación de contraseña en registro | ✅ |
+| Deslizar para eliminar en lista | ✅ |
+| Pull-to-refresh en perfil | ✅ |
 | Webhook Yape (stub) | ⚠️ Stub |
 | Notificaciones push | ❌ Futuro |
 | Galería de fotos | ❌ Futuro |
