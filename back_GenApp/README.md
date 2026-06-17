@@ -1,6 +1,6 @@
 # GeneApp Andina - Backend
 
-API REST para gestión de criadores de alpacas, llamas y ovinos en la región andina. Incluye clasificación etaria automática y validación parental por edad real.
+API REST para gestión de criadores de alpacas, llamas y ovinos en la región andina. Incluye clasificación etaria automática, validación parental por edad real e historial productivo de esquilas.
 
 ## Tecnologías
 
@@ -94,28 +94,39 @@ Servidor disponible en: `http://localhost:8000`
 
 | Método | Endpoint | Descripción | Planes |
 |--------|----------|-------------|--------|
-| GET | `/` | Listar (paginado, ?especie=&sexo=&activo=&search=) — incluye `categoria_edad` | Todos |
+| GET | `/` | Listar (paginado, ?especie=&sexo=&activo=&search=) — incluye `categoria_edad` y `foto` | Todos |
 | POST | `/` | Crear animal | Todos (limite) |
-| GET | `/{uid}/` | Detalle — incluye `categoria_edad` | Todos |
+| GET | `/{uid}/` | Detalle — incluye `categoria_edad` y `foto` (URL absoluta) | Todos |
 | PUT | `/{uid}/` | Actualizar (completo) | Todos |
-| PATCH | `/{uid}/` | Actualizar (parcial) | Todos |
+| PATCH | `/{uid}/` | Actualizar (parcial, incl. foto multipart) | Todos |
 | DELETE | `/{uid}/` | Eliminar (soft delete) | Todos |
 | GET | `/{uid}/arbol/` | Árbol genealógico (2-3 gen) — incluye `categoria_edad` por nodo | Todos |
+| GET | `/{uid}/producciones/` | **Listar esquilas** del animal (orden descendente por fecha) | Todos |
+| POST | `/{uid}/producciones/` | **Crear esquila** para el animal | Todos |
 | GET | `/candidatos/` | Lista para selector de padres — incluye `categoria_edad`, acepta `?especie=` | Todos |
 | GET | `/resumen/` | Stats (total, machos, hembras, especies) | Todos |
+
+### Producciones (prefix: `/api/v1/producciones/`)
+
+| Método | Endpoint | Descripción |
+|--------|----------|-------------|
+| GET | `/{uid}/` | Detalle de una esquila (incluye `animal_uid`) |
+| PUT | `/{uid}/` | Actualizar esquila (completo) |
+| PATCH | `/{uid}/` | Actualizar esquila (parcial) |
+| DELETE | `/{uid}/` | Eliminar esquila (físico) |
 
 ### Sincronización (prefix: `/api/v1/`)
 
 | Método | Endpoint | Descripción |
 |--------|----------|-------------|
-| POST | `sync/` | Sincronización offline (envía y recibe cambios) — incluye `categoria_edad` |
+| POST | `sync/` | Sincronización offline — envía y recibe cambios de **animales** y **producciones** (incluye `categoria_edad` y `produccion_changes`) |
 
 ### Reportes (prefix: `/api/v1/reporte/`)
 
 | Método | Endpoint | Descripción | Planes |
 |--------|----------|-------------|--------|
-| GET | `animales/?format=csv` | Descargar CSV | Básico/Criador |
-| GET | `animales/?format=pdf` | Descargar PDF | Básico/Criador |
+| GET | `animales/?format=csv` | Descargar CSV (incluye columna **Total Esquilas**) | Básico/Criador |
+| GET | `animales/?format=pdf` | Descargar PDF (incluye columna **Total Esquilas**) | Básico/Criador |
 
 ### Documentación
 
@@ -136,8 +147,12 @@ Servidor disponible en: `http://localhost:8000`
 | Categoría de edad automática (cría/tui_menor/tui_mayor/borrego/adulto) | ✅ Completo |
 | Límite de animales por plan | ✅ Completo |
 | Árbol genealógico (2-3 gen) | ✅ Completo |
-| Sincronización offline | ✅ Completo |
+| **CRUD de producciones (esquilas)** | ✅ **Nuevo** |
+| **Sincronización offline de producciones** | ✅ **Nuevo** |
+| **Total esquilas en reportes CSV/PDF** | ✅ **Nuevo** |
+| **Foto con URL absoluta (visible en app)** | ✅ **Mejorado** |
 | Reportes CSV/PDF | ✅ Completo |
+| Sincronización offline | ✅ Completo |
 | Búsqueda por arete/nombre | ✅ Completo |
 | Filtros (especie, sexo, activo, search) | ✅ Completo |
 | Candidatos con categoría de edad y filtro especie | ✅ Completo |
@@ -168,6 +183,18 @@ Servidor disponible en: `http://localhost:8000`
 - `activo` - Borrado lógico
 - `sync_status` - sincronizado / pendiente / error
 - `created_at` / `updated_at` / `deleted_at`
+
+### Produccion (historial de esquilas)
+- `uid` - UUID único para sincronización offline
+- `animal` - FK a Animal (relación 1 a N)
+- `fecha_esquila` - Fecha de la esquila (DateField)
+- `peso_vellon_kg` - Peso del vellón en kg (Decimal)
+- `rendimiento_pct` - Rendimiento en porcentaje (Decimal, nullable)
+- `observaciones` - Texto libre (TextField)
+- `sync_status` - sincronizado / pendiente / error
+- `created_at` / `updated_at`
+- Índice compuesto en `(animal, fecha_esquila)` para consultas rápidas
+- **No tiene soft delete** — se elimina físicamente
 
 ### Categoría de Edad (calculada, no almacenada)
 La categoría se calcula en `animales/utils.py` mediante `calcular_categoria_edad(especie, fecha_nacimiento)`:
@@ -286,7 +313,7 @@ GET http://localhost:8000/api/v1/reporte/animales/?format=csv
 .\env\Scripts\python.exe manage.py test
 ```
 
-61 tests — modelos, serializers, views, límites por plan, árbol genealógico, validación padre/madre, categoría de edad (11 tests).
+77 tests — modelos, serializers, views, límites por plan, árbol genealógico, validación padre/madre, categoría de edad, **producción (16 tests: modelo, endpoints, sync, validaciones)**.
 
 ## Estructura del Proyecto
 
@@ -301,11 +328,14 @@ back_GenApp/
 │   ├── views.py          # RegisterView, LoginView, PerfilView, etc.
 │   └── urls.py           # Rutas de usuarios
 ├── animales/             # App de animales
-│   ├── models.py         # Modelo Animal (con relaciones)
-│   ├── serializers.py    # CRUD, Sync, Reporte serializers (con categoria_edad)
-│   ├── views.py          # AnimalViewSet, SyncView, ReporteView
+│   ├── models.py         # Modelo Animal + Produccion (esquilas)
+│   ├── serializers.py    # CRUD, Sync, Reporte, Produccion serializers
+│   ├── views.py          # AnimalViewSet, ProduccionViewSet, SyncView, ReporteView
 │   ├── utils.py          # calcular_categoria_edad, _edad_en_meses
-│   └── urls.py           # Rutas de animales
+│   ├── urls.py           # Rutas de animales + producciones
+│   ├── tests.py          # 77 tests
+│   └── migrations/
+│       └── 0003_produccion.py
 ├── env/                  # Entorno virtual Python 3.12
 ├── media/                # Archivos subidos (fotos)
 │   └── animales/         # Fotos de animales

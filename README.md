@@ -2,7 +2,9 @@
 
 Aplicación móvil + API para que pequeños y medianos criadores de alpacas, llamas y ovinos puedan **digitalizar el registro genealógico de su ganado**, reemplazando las libretas de campo y hojas de cálculo.
 
-> **Nuevo:** Clasificación etaria automática — el sistema calcula la categoría de edad de cada animal (Cría, Tui Menor, Tui Mayor, Borrego, Adulto) en tiempo real según su especie y fecha de nacimiento, sin almacenarla en la base de datos.
+> **Nuevo:** Historial productivo por animal — ahora puedes registrar esquilas (fecha, peso del vellón, rendimiento) para llevar un historial de producción de fibra por animal.
+> 
+> > **Nuevo:** Clasificación etaria automática — el sistema calcula la categoría de edad de cada animal (Cría, Tui Menor, Tui Mayor, Borrego, Adulto) en tiempo real según su especie y fecha de nacimiento, sin almacenarla en la base de datos.
 
 ## Problema
 
@@ -20,14 +22,15 @@ Los criadores de la región andina (Perú, Bolivia, Ecuador) enfrentan:
 **GeneApp Andina** es un sistema mobile-first que permite:
 
 1. **Registrar cada animal** con su arete, especie, sexo, raza, fecha de nacimiento, foto y **categoría de edad calculada automáticamente**
-2. **Asignar padres** a cada animal, construyendo un árbol genealógico de hasta 3 generaciones, con validación por edad real (meses, no fecha comparada)
-3. **Visualizar el árbol genealógico** en pantalla, con indentación vertical para entender la línea familiar
-4. **Buscar y filtrar** animales por especie, sexo, categoría de edad o por nombre/arete
-5. **Dashboard** con resumen: total de animales, machos, hembras, desglose por especie
-6. **Planes de suscripción** (Gratuito, Básico, Criador) que controlan el límite de animales
-7. **Reportes** en CSV y PDF exportables (planes pagos)
-8. **Autenticación JWT** con refresh automático
-9. **Sincronización offline** (endpoint preparado)
+2. **Registrar esquilas** (fecha, peso del vellón, rendimiento) para crear un historial productivo que permite seleccionar a los mejores reproductores
+3. **Asignar padres** a cada animal, construyendo un árbol genealógico de hasta 3 generaciones, con validación por edad real (meses, no fecha comparada)
+4. **Visualizar el árbol genealógico** en pantalla, con indentación vertical para entender la línea familiar
+5. **Buscar y filtrar** animales por especie, sexo, categoría de edad o por nombre/arete
+6. **Dashboard** con resumen: total de animales, machos, hembras, desglose por especie
+7. **Planes de suscripción** (Gratuito, Básico, Criador) que controlan el límite de animales
+8. **Reportes** en CSV y PDF exportables con total de esquilas por animal (planes pagos)
+9. **Autenticación JWT** con refresh automático
+10. **Sincronización offline** total — animales y producciones
 
 ## Cómo funciona
 
@@ -57,9 +60,11 @@ Los criadores de la región andina (Perú, Bolivia, Ecuador) enfrentan:
 3. Ve el **Dashboard** con el resumen de su ganado y su plan actual
 4. **Registra animales** uno por uno, y opcionalmente asigna padre y madre
 5. Consulta el **árbol genealógico** de cada animal para ver su línea familiar
-6. **Filtra y busca** animales en la lista principal
-7. Si necesita más capacidad, **cambia de plan** desde el perfil
-8. Los planes pagos permiten **exportar reportes** CSV/PDF
+6. **Registra esquilas** (fecha, peso del vellón, rendimiento) en el detalle de cada animal
+7. Revisa el **historial productivo** para identificar a los mejores reproductores
+8. **Filtra y busca** animales en la lista principal
+9. Si necesita más capacidad, **cambia de plan** desde el perfil
+10. Los planes pagos permiten **exportar reportes** CSV/PDF con total de esquilas
 
 ## Funcionalidades
 
@@ -75,6 +80,15 @@ Los criadores de la región andina (Perú, Bolivia, Ecuador) enfrentan:
 - Validación: el padre debe ser macho, la madre hembra, los padres no pueden ser el mismo animal
 - **Categoría de edad calculada automáticamente** (Cría / Tui Menor / Tui Mayor / Borrego / Adulto) según especie y fecha de nacimiento
 - Validación parental por edad en meses (el padre debe tener más meses que el hijo, no solo fecha posterior)
+- **Foto visible en el detalle del animal** (header con imagen de red)
+
+### Producción (historial de esquilas)
+- Cada animal puede tener **múltiples registros de esquila** (relación 1 a N)
+- Campos: fecha de esquila (DatePicker), peso del vellón (kg), rendimiento (%), observaciones
+- CRUD completo desde el detalle del animal: listar, crear, editar, eliminar
+- Lista con FAB flotante para agregar nueva esquila
+- Sincronización offline: los cambios de producciones viajan junto con los animales en el endpoint `/sync/`
+- Reportes CSV/PDF incluyen columna **"Total Esquilas"** por animal
 
 ### Árbol genealógico
 - Vista vertical indentada con líneas conectoras
@@ -158,11 +172,14 @@ MVP/
 │   │   ├── urls.py
 │   │   └── tests.py                # Tests de usuarios
 │   ├── animales/                   # App de animales
-│   │   ├── models.py               # Animal con padres
-│   │   ├── serializers.py          # CRUD, Sync, Reporte
-│   │   ├── views.py                # AnimalViewSet, SyncView, ReporteView
+│   │   ├── models.py               # Animal + Produccion (esquilas)
+│   │   ├── serializers.py          # CRUD, Sync, Reporte, Produccion
+│   │   ├── views.py                # AnimalViewSet, ProduccionViewSet, SyncView, ReporteView
+│   │   ├── utils.py                # calcular_categoria_edad
 │   │   ├── urls.py                 # Rutas
-│   │   └── tests.py                # Tests de animales
+│   │   ├── tests.py                # 77 tests (incl. 16 de produccion)
+│   │   └── migrations/
+│   │       └── 0003_produccion.py  # Tabla producciones
 │   ├── env/                        # Entorno virtual Python
 │   ├── media/                      # Archivos subidos
 │   ├── requirements.txt
@@ -173,9 +190,10 @@ MVP/
 │   │   ├── main.dart               # Entry point
 │   │   ├── app.dart                # MaterialApp.router
 │   │   ├── data/
-│   │   │   ├── models/             # AnimalModel, UserModel, etc.
+│   │   ├── data/
+│   │   │   ├── models/             # AnimalModel, ProduccionModel, UserModel, etc.
 │   │   │   ├── services/           # ApiService con JWT
-│   │   │   └── repositories/       # AuthRepository, AnimalRepository
+│   │   │   └── repositories/       # AuthRepository, AnimalRepository (CRUD + producciones)
 │   │   ├── routes/
 │   │   │   └── app_router.dart     # GoRouter
 │   │   └── ui/
@@ -215,12 +233,12 @@ La app apunta a `http://10.0.2.2:8000` (Android emulator). Para iOS físico, cam
 
 ## Tests
 
-### Backend — 61 tests
+### Backend — 77 tests
 ```bash
 cd back_GenApp
 .\env\Scripts\python.exe manage.py test
 ```
-Cubren: modelos, serializers, CRUD, validación padres, límites por plan, árbol genealógico, sincronización, categoría de edad (11 tests específicos).
+Cubren: modelos, serializers, CRUD, validación padres, límites por plan, árbol genealógico, sincronización, categoría de edad, **producción (16 tests: modelo, endpoints anidados, standalone, sync, validaciones)**.
 
 ### Frontend — 27 tests
 ```bash
@@ -229,6 +247,7 @@ flutter test
 flutter analyze  # 0 issues
 ```
 Cubren: modelos (fromJson/toJson), estados (copyWith), widgets (LoadingButton), integración.
+**Backend 77 + Frontend 27 = 104 tests total.**
 
 ## Estado del proyecto
 
@@ -248,6 +267,11 @@ Funcionalidades implementadas:
 | Filtros (especie, sexo, categoría) | ✅ |
 | Scroll infinito paginado | ✅ |
 | Dashboard con estadísticas | ✅ |
+| Historial de esquilas (Producción) | ✅ |
+| CRUD de esquilas (modal con DatePicker) | ✅ |
+| Sincronización offline de producciones | ✅ |
+| Total esquilas en reportes CSV/PDF | ✅ |
+| Foto visible en detalle del animal | ✅ |
 | Reportes CSV/PDF | ✅ |
 | Sincronización offline | ✅ |
 | Soft delete | ✅ |

@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:front_genapp/data/models/animal_model.dart';
+import 'package:front_genapp/data/models/produccion_model.dart';
 import 'package:front_genapp/data/repositories/animal_repository.dart';
 import 'package:front_genapp/ui/features/auth/providers/auth_provider.dart';
 
@@ -122,3 +123,35 @@ final animalArbolProvider =
 final resumenProvider = FutureProvider<Map<String, dynamic>>((ref) {
   return ref.read(animalRepositoryProvider).getResumen();
 });
+
+final produccionListProvider =
+    FutureProvider.family<List<ProduccionModel>, String>((ref, animalUid) {
+  return ref.read(animalRepositoryProvider).getProducciones(animalUid);
+});
+
+final produccionCreateProvider =
+    FutureProvider.family<ProduccionModel, ProduccionCreateParams>((ref, p) {
+  return ref.read(animalRepositoryProvider).createProduccion(p.animalUid, p.produccion);
+});
+
+final produccionUpdateProvider =
+    FutureProvider.family<ProduccionModel, ProduccionUpdateParams>((ref, p) {
+  return ref.read(animalRepositoryProvider).updateProduccion(p.uid, p.produccion);
+});
+
+final produccionDeleteProvider =
+    FutureProvider.family<void, String>((ref, uid) {
+  return ref.read(animalRepositoryProvider).deleteProduccion(uid);
+});
+
+class ProduccionCreateParams {
+  final String animalUid;
+  final ProduccionModel produccion;
+  const ProduccionCreateParams(this.animalUid, this.produccion);
+}
+
+class ProduccionUpdateParams {
+  final String uid;
+  final ProduccionModel produccion;
+  const ProduccionUpdateParams(this.uid, this.produccion);
+}

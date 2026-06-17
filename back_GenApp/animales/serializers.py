@@ -1,7 +1,7 @@
 from datetime import date
 from rest_framework import serializers
 from django.db import IntegrityError
-from .models import Animal, Especie, Sexo
+from .models import Animal, Especie, Sexo, Produccion
 from .utils import calcular_categoria_edad, _edad_en_meses
 
 
@@ -29,6 +29,7 @@ class AnimalSerializer(serializers.ModelSerializer):
     padre = UidToAnimalField(required=False, allow_null=True)
     madre = UidToAnimalField(required=False, allow_null=True)
     categoria_edad = serializers.SerializerMethodField()
+    foto = serializers.SerializerMethodField()
 
     class Meta:
         model = Animal
@@ -42,6 +43,14 @@ class AnimalSerializer(serializers.ModelSerializer):
 
     def get_categoria_edad(self, obj):
         return calcular_categoria_edad(obj.especie, obj.fecha_nacimiento)
+
+    def get_foto(self, obj):
+        if obj.foto:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.foto.url)
+            return obj.foto.url
+        return None
 
     def validate_fecha_nacimiento(self, value):
         if value > date.today():
@@ -107,6 +116,7 @@ class AnimalSerializer(serializers.ModelSerializer):
 
 class AnimalListSerializer(serializers.ModelSerializer):
     categoria_edad = serializers.SerializerMethodField()
+    foto = serializers.SerializerMethodField()
 
     class Meta:
         model = Animal
@@ -114,6 +124,14 @@ class AnimalListSerializer(serializers.ModelSerializer):
 
     def get_categoria_edad(self, obj):
         return calcular_categoria_edad(obj.especie, obj.fecha_nacimiento)
+
+    def get_foto(self, obj):
+        if obj.foto:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.foto.url)
+            return obj.foto.url
+        return None
 
 
 class SyncChangeSerializer(serializers.Serializer):
@@ -132,15 +150,28 @@ class SyncChangeSerializer(serializers.Serializer):
     local_updated_at = serializers.DateTimeField(required=False, allow_null=True)
 
 
+class SyncProduccionChangeSerializer(serializers.Serializer):
+    uid = serializers.UUIDField(required=True)
+    animal_uid = serializers.UUIDField(required=True)
+    fecha_esquila = serializers.DateField()
+    peso_vellon_kg = serializers.DecimalField(max_digits=6, decimal_places=2)
+    rendimiento_pct = serializers.DecimalField(max_digits=5, decimal_places=2, required=False, allow_null=True)
+    observaciones = serializers.CharField(required=False, default='')
+    action = serializers.ChoiceField(choices=['create', 'update', 'delete'], default='create')
+    local_updated_at = serializers.DateTimeField(required=False, allow_null=True)
+
+
 class SyncInputSerializer(serializers.Serializer):
     last_sync = serializers.DateTimeField(required=False, allow_null=True)
     changes = SyncChangeSerializer(many=True, required=False, default=list)
+    produccion_changes = SyncProduccionChangeSerializer(many=True, required=False, default=list)
 
 
 class SyncOutputAnimalSerializer(serializers.ModelSerializer):
     padre_uid = serializers.UUIDField(source='padre.uid', allow_null=True)
     madre_uid = serializers.UUIDField(source='madre.uid', allow_null=True)
     categoria_edad = serializers.SerializerMethodField()
+    foto = serializers.SerializerMethodField()
 
     class Meta:
         model = Animal
@@ -148,11 +179,37 @@ class SyncOutputAnimalSerializer(serializers.ModelSerializer):
             'uid', 'arete', 'especie', 'sexo', 'fecha_nacimiento',
             'nombre', 'raza', 'padre_uid', 'madre_uid',
             'observaciones', 'activo', 'sync_status', 'updated_at', 'deleted_at',
-            'categoria_edad'
+            'categoria_edad', 'foto'
         ]
 
     def get_categoria_edad(self, obj):
         return calcular_categoria_edad(obj.especie, obj.fecha_nacimiento)
+
+    def get_foto(self, obj):
+        if obj.foto:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.foto.url)
+            return obj.foto.url
+        return None
+
+
+class SyncOutputProduccionSerializer(serializers.ModelSerializer):
+    animal_uid = serializers.UUIDField(source='animal.uid', read_only=True)
+
+    class Meta:
+        model = Produccion
+        fields = [
+            'uid', 'animal_uid', 'fecha_esquila', 'peso_vellon_kg',
+            'rendimiento_pct', 'observaciones', 'sync_status',
+            'updated_at'
+        ]
+
+
+class SyncOutputSerializer(serializers.Serializer):
+    server_changes = SyncOutputAnimalSerializer(many=True)
+    produccion_changes = SyncOutputProduccionSerializer(many=True)
+    sync_timestamp = serializers.DateTimeField()
 
 
 class CandidatoSerializer(serializers.ModelSerializer):
@@ -164,6 +221,32 @@ class CandidatoSerializer(serializers.ModelSerializer):
 
     def get_categoria_edad(self, obj):
         return calcular_categoria_edad(obj.especie, obj.fecha_nacimiento)
+
+
+class ProduccionSerializer(serializers.ModelSerializer):
+    animal_uid = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Produccion
+        fields = [
+            'uid', 'animal_uid', 'fecha_esquila', 'peso_vellon_kg',
+            'rendimiento_pct', 'observaciones', 'sync_status',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = ['uid', 'animal_uid', 'sync_status', 'created_at', 'updated_at']
+
+    def get_animal_uid(self, obj):
+        return str(obj.animal.uid)
+
+    def validate_fecha_esquila(self, value):
+        if value > date.today():
+            raise serializers.ValidationError('La fecha de esquila no puede ser futura')
+        return value
+
+    def validate_peso_vellon_kg(self, value):
+        if value <= 0:
+            raise serializers.ValidationError('El peso del vellón debe ser mayor a 0')
+        return value
 
 
 class ReporteSerializer(serializers.Serializer):

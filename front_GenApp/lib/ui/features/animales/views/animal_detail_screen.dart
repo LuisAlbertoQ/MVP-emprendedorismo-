@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:front_genapp/data/models/produccion_model.dart';
 import 'package:front_genapp/ui/features/animales/providers/animal_provider.dart';
 import 'package:front_genapp/data/models/animal_model.dart' show AnimalModel, categoriaEdadLabel;
 import 'package:front_genapp/ui/core/constants.dart';
 import 'package:front_genapp/ui/core/theme.dart';
+import 'package:front_genapp/ui/features/animales/views/produccion_form_sheet.dart';
 
 class AnimalDetailScreen extends ConsumerWidget {
   final String uid;
@@ -15,6 +17,14 @@ class AnimalDetailScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final async = ref.watch(animalDetailProvider(uid));
     return Scaffold(
+      floatingActionButton: async.maybeWhen(
+        data: (a) => FloatingActionButton(
+          heroTag: 'add_produccion',
+          child: const Icon(Icons.add),
+          onPressed: () => _showForm(context, ref, a.uid),
+        ),
+        orElse: () => null,
+      ),
       body: async.when(
         data: (a) => _DetailBody(animal: a),
         loading: () => const Center(child: CircularProgressIndicator()),
@@ -22,16 +32,28 @@ class AnimalDetailScreen extends ConsumerWidget {
       ),
     );
   }
+
+  void _showForm(BuildContext context, WidgetRef ref, String animalUid) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (_) => ProduccionFormSheet(animalUid: animalUid),
+    );
+  }
 }
 
-class _DetailBody extends StatelessWidget {
+class _DetailBody extends ConsumerWidget {
   final AnimalModel animal;
   const _DetailBody({required this.animal});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final dateStr = DateFormat('dd/MM/yyyy').format(animal.fechaNacimiento);
+    final prodAsync = ref.watch(produccionListProvider(animal.uid));
     return CustomScrollView(
       slivers: [
         _Header(animal: animal, dateStr: dateStr),
@@ -49,11 +71,166 @@ class _DetailBody extends StatelessWidget {
               ],
               const SizedBox(height: 24),
               _ActionButtons(animal: animal),
+              const SizedBox(height: 24),
+              _ProduccionSection(animal: animal, prodAsync: prodAsync),
               const SizedBox(height: 32),
             ]),
           ),
         ),
       ],
+    );
+  }
+}
+
+class _ProduccionSection extends ConsumerWidget {
+  final AnimalModel animal;
+  final AsyncValue<List<ProduccionModel>> prodAsync;
+  const _ProduccionSection({required this.animal, required this.prodAsync});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.schema, size: 20, color: Colors.grey.shade600),
+                const SizedBox(width: 8),
+                Text('Historial de Esquilas',
+                    style: theme.textTheme.titleSmall
+                        ?.copyWith(fontWeight: FontWeight.bold)),
+              ],
+            ),
+            const Divider(),
+            prodAsync.when(
+              data: (list) => list.isEmpty
+                  ? Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: Text('Sin esquilas registradas',
+                          style: TextStyle(color: Colors.grey.shade500)),
+                    )
+                  : Column(
+                      children: list.map((p) => _ProduccionItem(
+                        produccion: p,
+                        onEdit: () => _editForm(context, ref, p),
+                        onDelete: () => _deleteConfirm(context, ref, p),
+                      )).toList(),
+                    ),
+              loading: () => const Padding(
+                padding: EdgeInsets.all(8),
+                child: Center(child: CircularProgressIndicator()),
+              ),
+              error: (e, _) => Text('Error: $e',
+                  style: const TextStyle(color: Colors.red)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _editForm(BuildContext context, WidgetRef ref, ProduccionModel p) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (_) => ProduccionFormSheet(
+        animalUid: animal.uid,
+        produccion: p,
+      ),
+    );
+  }
+
+  void _deleteConfirm(BuildContext context, WidgetRef ref, ProduccionModel p) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Eliminar esquila'),
+        content: Text(
+            '¿Eliminar esquila del ${DateFormat('dd/MM/yyyy').format(p.fechaEsquila)}?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              try {
+                await ref.read(animalRepositoryProvider)
+                    .deleteProduccion(p.uid);
+                ref.invalidate(produccionListProvider(animal.uid));
+              } catch (e) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Error: $e')));
+                }
+              }
+            },
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Eliminar'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProduccionItem extends StatelessWidget {
+  final ProduccionModel produccion;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+  const _ProduccionItem({
+    required this.produccion,
+    required this.onEdit,
+    required this.onDelete,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final dateStr = DateFormat('dd/MM/yyyy').format(produccion.fechaEsquila);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        children: [
+          Icon(Icons.content_cut, size: 18, color: Colors.grey.shade600),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(dateStr,
+                    style: theme.textTheme.bodyMedium
+                        ?.copyWith(fontWeight: FontWeight.w600)),
+                const SizedBox(height: 2),
+                Text(
+                  '${produccion.pesoVellonKg.toStringAsFixed(2)} kg'
+                  '${produccion.rendimientoPct != null ? ' · ${produccion.rendimientoPct!.toStringAsFixed(1)}%' : ''}',
+                  style: theme.textTheme.bodySmall
+                      ?.copyWith(color: Colors.grey.shade600),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.edit, size: 18),
+            onPressed: onEdit,
+            visualDensity: VisualDensity.compact,
+          ),
+          IconButton(
+            icon: Icon(Icons.delete_outline, size: 18, color: Colors.red.shade400),
+            onPressed: onDelete,
+            visualDensity: VisualDensity.compact,
+          ),
+        ],
+      ),
     );
   }
 }
@@ -91,15 +268,26 @@ class _Header extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               const SpinnerNoOp(),
-              CircleAvatar(
-                radius: 40,
-                backgroundColor: Colors.white.withValues(alpha: 0.25),
-                child: Icon(
-                  isMale ? Icons.male : Icons.female,
-                  size: 44,
-                  color: Colors.white,
-                ),
-              ),
+              animal.foto != null
+                  ? CircleAvatar(
+                      radius: 40,
+                      backgroundImage: Image.network(animal.foto!).image,
+                      onBackgroundImageError: (_, __) {},
+                      child: Icon(
+                        isMale ? Icons.male : Icons.female,
+                        size: 44,
+                        color: Colors.white,
+                      ),
+                    )
+                  : CircleAvatar(
+                      radius: 40,
+                      backgroundColor: Colors.white.withValues(alpha: 0.25),
+                      child: Icon(
+                        isMale ? Icons.male : Icons.female,
+                        size: 44,
+                        color: Colors.white,
+                      ),
+                    ),
               const SizedBox(height: 8),
               Text(
                 animal.nombre.isNotEmpty

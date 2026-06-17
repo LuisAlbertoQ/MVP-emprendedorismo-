@@ -1,6 +1,6 @@
 # GeneApp Andina — Frontend (Flutter)
 
-Aplicación móvil para gestión de criadores de alpacas, llamas y ovinos.
+Aplicación móvil para gestión de criadores de alpacas, llamas y ovinos. Incluye historial productivo de esquilas, árbol genealógico, categoría de edad automática y sincronización offline.
 
 ## Tecnologías
 
@@ -50,12 +50,13 @@ lib/
 ├── data/
 │   ├── models/
 │   │   ├── animal_model.dart    # AnimalModel, AnimalListModel, CandidatoModel, ArbolNode
+│   │   ├── produccion_model.dart # ProduccionModel, ProduccionSyncChange
 │   │   └── user_model.dart      # UserModel
 │   ├── services/
 │   │   └── api_service.dart     # Dio + interceptors JWT + refresh
 │   └── repositories/
 │       ├── auth_repository.dart # Auth (login, register, perfil, logout)
-│       └── animal_repository.dart # Animales (CRUD, árbol, candidatos, resumen, descarga)
+│       └── animal_repository.dart # Animales + Producciones CRUD
 ├── routes/
 │   └── app_router.dart          # GoRouter con redirect por auth + ShellRoute
 ├── ui/
@@ -79,11 +80,12 @@ lib/
 │       │       └── dashboard_screen.dart  # Stats, plan banner, quick actions
 │       ├── animales/
 │       │   ├── providers/
-│       │   │   └── animal_provider.dart  # AnimalListState, detail, árbol, resumen
+│       │   │   └── animal_provider.dart  # AnimalList, detail, árbol, resumen, producciones
 │       │   └── views/
 │       │       ├── animal_list_screen.dart   # Lista + filtros + buscar + scroll infinito
-│       │       ├── animal_detail_screen.dart # Detalle con header gradiente
-│       │       ├── animal_form_screen.dart   # Crear/editar con selector de padres
+│       │       ├── animal_detail_screen.dart # Detalle con header, padres, historial esquilas
+│       │       ├── animal_form_screen.dart   # Crear/editar con selector de padres + foto
+│       │       ├── produccion_form_sheet.dart # Modal para crear/editar esquila
 │       │       └── arbol_screen.dart         # Árbol genealógico vertical
 │       ├── perfil/
 │       │   └── views/
@@ -107,8 +109,9 @@ lib/
 
 ### Animales
 - **Lista**: scroll infinito, filtros por especie/sexo, buscador por arete/nombre, tag de categoría de edad en cada card, deslizar para eliminar
-- **Detalle**: header con gradiente, info con categoría de edad, padres (tappable), observaciones
-- **Formulario**: crear/editar con selector de padres (buscador modal con filtro por especie y visualización de categoría de edad), carga de fotos, confirmación de contraseña en registro
+- **Detalle**: header con gradiente + foto, info con categoría de edad, padres tappables, observaciones, **historial de esquilas** con FAB para agregar
+- **Formulario**: crear/editar con selector de padres (buscador modal con filtro por especie y categoría de edad), carga de fotos, confirmación de contraseña
+- **Producción**: modal bottom sheet con DatePicker, peso vellón (kg), rendimiento (%), observaciones — editar/eliminar desde la lista
 - **Árbol**: vista vertical indentada con líneas conectoras
 
 ### Perfil
@@ -127,11 +130,12 @@ lib/
 flutter test
 ```
 
-27 tests (61 backend + 27 frontend = 88 total):
-- Modelos: AnimalModel (con categoriaEdad), UserModel, CandidatoModel, ArbolNode (fromJson/toJson)
+30 tests:
+- Modelos: AnimalModel (con categoriaEdad), ProduccionModel, UserModel, CandidatoModel, ArbolNode (fromJson/toJson)
 - Estados: AuthState, AnimalListState (copyWith)
 - Widgets: LoadingButton (idle, loading, disabled)
 - Integración: LoginScreen render cuando no autenticado
+**Backend 77 + Frontend 27 = 104 tests total.**
 
 ## Análisis estático
 

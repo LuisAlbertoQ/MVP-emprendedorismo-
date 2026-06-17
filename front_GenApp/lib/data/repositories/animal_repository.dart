@@ -1,4 +1,5 @@
 import 'package:front_genapp/data/models/animal_model.dart';
+import 'package:front_genapp/data/models/produccion_model.dart';
 import 'package:front_genapp/data/services/api_service.dart';
 
 class AnimalRepository {
@@ -64,5 +65,29 @@ class AnimalRepository {
 
   Future<void> subirFoto(String uid, String filePath) async {
     await _api.patchMultipart('/animales/$uid/', {}, filePath);
+  }
+
+  Future<List<ProduccionModel>> getProducciones(String animalUid) async {
+    final data = await _api.getList('/animales/$animalUid/producciones/');
+    return data
+        .map((e) => ProduccionModel.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<ProduccionModel> createProduccion(
+      String animalUid, ProduccionModel p) async {
+    final data =
+        await _api.post('/animales/$animalUid/producciones/', p.toJson());
+    return ProduccionModel.fromJson(data);
+  }
+
+  Future<ProduccionModel> updateProduccion(
+      String uid, ProduccionModel p) async {
+    final data = await _api.patch('/producciones/$uid/', p.toJson());
+    return ProduccionModel.fromJson(data);
+  }
+
+  Future<void> deleteProduccion(String uid) async {
+    await _api.delete('/producciones/$uid/');
   }
 }

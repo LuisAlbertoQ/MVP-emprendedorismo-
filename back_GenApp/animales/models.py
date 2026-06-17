@@ -83,3 +83,27 @@ class Animal(models.Model):
             raise ValidationError({'padre': 'El padre debe pertenecer al mismo usuario'})
         if self.madre and self.madre.usuario != self.usuario:
             raise ValidationError({'madre': 'La madre debe pertenecer al mismo usuario'})
+
+
+class Produccion(models.Model):
+    uid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
+    animal = models.ForeignKey(Animal, on_delete=models.CASCADE, related_name='producciones')
+    fecha_esquila = models.DateField()
+    peso_vellon_kg = models.DecimalField(max_digits=6, decimal_places=2)
+    rendimiento_pct = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
+    observaciones = models.TextField(blank=True, default='')
+    sync_status = models.CharField(max_length=15, choices=SyncStatus.choices, default=SyncStatus.SIC)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'producciones'
+        verbose_name = 'Producción'
+        verbose_name_plural = 'Producciones'
+        ordering = ['-fecha_esquila']
+        indexes = [
+            models.Index(fields=['animal', 'fecha_esquila'], name='idx_producciones_animal_fecha'),
+        ]
+
+    def __str__(self):
+        return f"{self.animal.arete} - {self.fecha_esquila} - {self.peso_vellon_kg}kg"

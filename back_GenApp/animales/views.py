@@ -3,7 +3,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.renderers import BaseRenderer
-from django.db.models import Q
+from django.db.models import Q, Count
 from django.utils import timezone
 from django.http import HttpResponse
 from drf_spectacular.utils import extend_schema, OpenApiParameter
@@ -29,11 +29,14 @@ class PDFRenderer(BaseRenderer):
     def render(self, data, media_type=None, renderer_context=None):
         return data
 
-from .models import Animal, SyncStatus
+from .models import Animal, Produccion, SyncStatus
 from .utils import calcular_categoria_edad
 from .serializers import (
     AnimalSerializer, AnimalListSerializer, CandidatoSerializer,
     SyncInputSerializer, SyncOutputAnimalSerializer,
+    SyncOutputSerializer,
+    ProduccionSerializer,
+    SyncOutputProduccionSerializer,
     ReporteSerializer
 )
 
@@ -132,6 +135,21 @@ class AnimalViewSet(viewsets.ModelViewSet):
         serializer = CandidatoSerializer(queryset, many=True)
         return Response(serializer.data)
 
+    @action(detail=True, methods=['get', 'post'])
+    def producciones(self, request, pk=None):
+        animal = self.get_object()
+        if request.method == 'POST':
+            serializer = ProduccionSerializer(
+                data=request.data,
+                context={'request': request}
+            )
+            serializer.is_valid(raise_exception=True)
+            serializer.save(animal=animal, sync_status=SyncStatus.SIC)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        queryset = animal.producciones.all()
+        serializer = ProduccionSerializer(queryset, many=True)
+        return Response(serializer.data)
+
     @action(detail=False, methods=['get'])
     def resumen(self, request):
         qs = Animal.objects.filter(usuario=request.user, activo=True)
@@ -152,6 +170,22 @@ class AnimalViewSet(viewsets.ModelViewSet):
             'plan': user.plan,
             'limite': user.limite_animales,
         })
+
+
+class ProduccionViewSet(viewsets.ModelViewSet):
+    serializer_class = ProduccionSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    lookup_field = 'uid'
+    lookup_url_kwarg = 'pk'
+    http_method_names = ['get', 'put', 'patch', 'delete', 'head', 'options']
+
+    def get_queryset(self):
+        return Produccion.objects.filter(
+            animal__usuario=self.request.user
+        ).select_related('animal')
+
+    def perform_destroy(self, instance):
+        instance.delete()
 
 
 class SyncView(APIView):
@@ -247,14 +281,57 @@ class SyncView(APIView):
 
             animal.save()
 
-        queryset = Animal.objects.filter(usuario=request.user)
-        if last_sync:
-            queryset = queryset.filter(updated_at__gt=last_sync)
+        produccion_changes = serializer.validated_data.get('produccion_changes', [])
 
-        serializer = SyncOutputAnimalSerializer(queryset, many=True)
+        for change in produccion_changes:
+            action = change.get('action', 'create')
+            uid = change.get('uid')
+            animal_uid = change.get('animal_uid')
+
+            if action == 'delete':
+                Produccion.objects.filter(uid=uid, animal__usuario=request.user).delete()
+                continue
+
+            prod_data = {
+                'fecha_esquila': change['fecha_esquila'],
+                'peso_vellon_kg': change['peso_vellon_kg'],
+                'rendimiento_pct': change.get('rendimiento_pct'),
+                'observaciones': change.get('observaciones', ''),
+                'sync_status': SyncStatus.SIC,
+            }
+
+            animal = Animal.objects.filter(uid=animal_uid, usuario=request.user).first()
+            if not animal:
+                continue
+
+            if action == 'create':
+                existing = Produccion.objects.filter(uid=uid).first()
+                if not existing:
+                    Produccion.objects.create(uid=uid, animal=animal, **prod_data)
+
+            elif action == 'update':
+                try:
+                    prod = Produccion.objects.get(uid=uid, animal__usuario=request.user)
+                    local_updated = change.get('local_updated_at')
+                    if not local_updated or prod.updated_at < local_updated:
+                        for key, value in prod_data.items():
+                            setattr(prod, key, value)
+                        prod.save()
+                except Produccion.DoesNotExist:
+                    pass
+
+        animal_qs = Animal.objects.filter(usuario=request.user)
+        prod_qs = Produccion.objects.filter(animal__usuario=request.user)
+        if last_sync:
+            animal_qs = animal_qs.filter(updated_at__gt=last_sync)
+            prod_qs = prod_qs.filter(updated_at__gt=last_sync)
+
+        animal_ser = SyncOutputAnimalSerializer(animal_qs, many=True)
+        prod_ser = SyncOutputProduccionSerializer(prod_qs, many=True)
 
         return Response({
-            'server_changes': serializer.data,
+            'server_changes': animal_ser.data,
+            'produccion_changes': prod_ser.data,
             'sync_timestamp': timezone.now().isoformat(),
             'processed': processed_uids
         })
@@ -295,7 +372,7 @@ class ReporteView(APIView):
         response['Content-Disposition'] = 'attachment; filename="animales.csv"'
 
         writer = csv.writer(response)
-        writer.writerow(['Arete', 'Nombre', 'Especie', 'Sexo', 'Fecha Nacimiento', 'Padre', 'Madre', 'Observaciones'])
+        writer.writerow(['Arete', 'Nombre', 'Especie', 'Sexo', 'Fecha Nacimiento', 'Padre', 'Madre', 'Observaciones', 'Total Esquilas'])
 
         for animal in queryset:
             writer.writerow([
@@ -306,7 +383,8 @@ class ReporteView(APIView):
                 animal.fecha_nacimiento.isoformat() if animal.fecha_nacimiento else '',
                 animal.padre.arete if animal.padre else 'N/A',
                 animal.madre.arete if animal.madre else 'N/A',
-                animal.observaciones
+                animal.observaciones,
+                animal.producciones.count()
             ])
         return response
 
@@ -315,7 +393,7 @@ class ReporteView(APIView):
         doc = SimpleDocTemplate(buffer, pagesize=letter)
         elements = []
 
-        data = [['Arete', 'Nombre', 'Especie', 'Sexo', 'F. Nacimiento', 'Padre', 'Madre', 'Observaciones']]
+        data = [['Arete', 'Nombre', 'Especie', 'Sexo', 'F. Nacimiento', 'Padre', 'Madre', 'Observaciones', 'Total Esquilas']]
         for animal in queryset:
             data.append([
                 animal.arete,
@@ -325,7 +403,8 @@ class ReporteView(APIView):
                 animal.fecha_nacimiento.isoformat() if animal.fecha_nacimiento else '',
                 animal.padre.arete if animal.padre else 'N/A',
                 animal.madre.arete if animal.madre else 'N/A',
-                animal.observaciones
+                animal.observaciones,
+                str(animal.producciones.count())
             ])
 
         table = Table(data)
