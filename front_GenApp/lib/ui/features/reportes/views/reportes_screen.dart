@@ -21,20 +21,38 @@ class ReportesScreen extends ConsumerWidget {
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: isPaid
-            ? Column(
+            ? ListView(
                 children: [
+                  const _SectionHeader(title: 'Animales'),
+                  const SizedBox(height: 8),
                   _ReporteCard(
                     icon: Icons.table_chart,
-                    title: 'Exportar CSV',
-                    subtitle: 'Lista completa de animales en formato CSV',
-                    onPressed: () => _descargar(ref, context, 'csv'),
+                    title: 'CSV - Animales',
+                    subtitle: 'Lista completa de animales',
+                    onPressed: () => _descargar(ref, context, 'animales', 'csv'),
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 8),
                   _ReporteCard(
                     icon: Icons.picture_as_pdf,
-                    title: 'Exportar PDF',
-                    subtitle: 'Lista completa de animales en formato PDF',
-                    onPressed: () => _descargar(ref, context, 'pdf'),
+                    title: 'PDF - Animales',
+                    subtitle: 'Lista completa de animales',
+                    onPressed: () => _descargar(ref, context, 'animales', 'pdf'),
+                  ),
+                  const SizedBox(height: 24),
+                  const _SectionHeader(title: 'Producción (Esquilas)'),
+                  const SizedBox(height: 8),
+                  _ReporteCard(
+                    icon: Icons.table_chart,
+                    title: 'CSV - Esquilas',
+                    subtitle: 'Historial de esquilas con peso y rendimiento',
+                    onPressed: () => _descargar(ref, context, 'esquilas', 'csv'),
+                  ),
+                  const SizedBox(height: 8),
+                  _ReporteCard(
+                    icon: Icons.picture_as_pdf,
+                    title: 'PDF - Esquilas',
+                    subtitle: 'Historial de esquilas con peso y rendimiento',
+                    onPressed: () => _descargar(ref, context, 'esquilas', 'pdf'),
                   ),
                 ],
               )
@@ -61,15 +79,15 @@ class ReportesScreen extends ConsumerWidget {
     );
   }
 
-  Future<void> _descargar(WidgetRef ref, BuildContext context, String format) async {
+  Future<void> _descargar(WidgetRef ref, BuildContext context, String tipo, String format) async {
     try {
       final api = ref.read(animalRepositoryProvider);
       final dir = await getTemporaryDirectory();
-      final file = File('${dir.path}/animales.$format');
-      await api.download('/reporte/animales/?format=$format', file.path);
+      final file = File('${dir.path}/$tipo.$format');
+      await api.download('/reporte/$tipo/?format=$format', file.path);
       if (context.mounted) {
         await Share.shareXFiles(
-          [XFile(file.path)], text: 'Reporte GeneApp Andina',
+          [XFile(file.path)], text: 'Reporte GeneApp Andina - $tipo',
         );
       }
     } catch (e) {
@@ -79,6 +97,18 @@ class ReportesScreen extends ConsumerWidget {
         );
       }
     }
+  }
+}
+
+class _SectionHeader extends StatelessWidget {
+  final String title;
+  const _SectionHeader({required this.title});
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(title, style: Theme.of(context).textTheme.titleMedium?.copyWith(
+      fontWeight: FontWeight.bold, color: AppTheme.primary,
+    ));
   }
 }
 

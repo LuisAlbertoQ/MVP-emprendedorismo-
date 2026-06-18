@@ -485,3 +485,131 @@ class ReporteView(APIView):
         response = HttpResponse(buffer.read(), content_type='application/pdf')
         response['Content-Disposition'] = 'attachment; filename="animales.pdf"'
         return response
+
+
+class ReporteProduccionView(APIView):
+    permission_classes = [permissions.IsAuthenticated, IsPaidPlan]
+    renderer_classes = [CSVRenderer, PDFRenderer]
+
+    def perform_content_negotiation(self, request, force_format=None):
+        fmt = request.query_params.get('format', 'csv')
+        for renderer in self.renderer_classes:
+            if renderer.format == fmt:
+                return (renderer, renderer.media_type)
+        return (self.renderer_classes[0], self.renderer_classes[0].media_type)
+
+    @extend_schema(
+        parameters=[OpenApiParameter(name='format', type=str)],
+        responses={200: {'type': 'file'}}
+    )
+    def get(self, request):
+        fmt = request.query_params.get('format', 'csv')
+        queryset = Produccion.objects.filter(
+            animal__usuario=request.user
+        ).select_related('animal').order_by('-fecha_esquila')
+
+        if fmt == 'csv':
+            return self._generate_csv(queryset)
+        return self._generate_pdf(queryset)
+
+    def _generate_csv(self, queryset):
+        response = HttpResponse(content_type='text/csv')
+        response['Content-Disposition'] = 'attachment; filename="esquilas.csv"'
+
+        writer = csv.writer(response)
+        writer.writerow([
+            'Arete Animal', 'Nombre Animal', 'Especie', 'Fecha Esquila',
+            'Peso Vellón (kg)', 'Rendimiento (%)', 'Observaciones'
+        ])
+        for p in queryset:
+            writer.writerow([
+                p.animal.arete,
+                p.animal.nombre,
+                p.animal.get_especie_display(),
+                p.fecha_esquila.strftime('%d/%m/%Y'),
+                str(p.peso_vellon_kg),
+                str(p.rendimiento_pct) if p.rendimiento_pct is not None else '',
+                p.observaciones,
+            ])
+        return response
+
+    def _generate_pdf(self, queryset):
+        buffer = io.BytesIO()
+        doc = SimpleDocTemplate(
+            buffer, pagesize=landscape(letter),
+            leftMargin=0.5*inch, rightMargin=0.5*inch,
+            topMargin=0.75*inch, bottomMargin=0.75*inch
+        )
+
+        styles = getSampleStyleSheet()
+        title_style = ParagraphStyle(
+            'CustomTitle', parent=styles['Title'],
+            fontSize=18, spaceAfter=4, textColor=colors.HexColor('#2E7D32')
+        )
+        subtitle_style = ParagraphStyle(
+            'Subtitle', parent=styles['Normal'],
+            fontSize=9, textColor=colors.grey, alignment=TA_CENTER, spaceAfter=6
+        )
+        cell_style = ParagraphStyle('Cell', fontSize=8, leading=11)
+
+        elements = []
+        elements.append(Paragraph('GeneApp Andina', title_style))
+        elements.append(Paragraph('Reporte de Esquilas (Producción)', subtitle_style))
+        elements.append(Paragraph(
+            f'Generado: {datetime.now().strftime("%d/%m/%Y %H:%M")}  |  '
+            f'Total: {queryset.count()} registros',
+            subtitle_style
+        ))
+        elements.append(Spacer(1, 0.2*inch))
+
+        table_data = [[
+            'Arete', 'Animal', 'Especie', 'Fecha Esquila',
+            'Peso (kg)', 'Rend. (%)', 'Observaciones'
+        ]]
+        for p in queryset:
+            table_data.append([
+                Paragraph(p.animal.arete, cell_style),
+                Paragraph(p.animal.nombre[:20], cell_style),
+                Paragraph(p.animal.get_especie_display(), cell_style),
+                Paragraph(p.fecha_esquila.strftime('%d/%m/%Y'), cell_style),
+                Paragraph(f'{p.peso_vellon_kg:.2f}', ParagraphStyle(
+                    'NumCell', parent=cell_style, alignment=TA_CENTER
+                )),
+                Paragraph(
+                    f'{p.rendimiento_pct:.1f}%' if p.rendimiento_pct else '-',
+                    ParagraphStyle('PctCell', parent=cell_style, alignment=TA_CENTER)
+                ),
+                Paragraph(p.observaciones[:35], cell_style),
+            ])
+
+        col_widths = [0.6*inch, 1.1*inch, 0.7*inch, 0.9*inch, 0.7*inch, 0.6*inch, 1.8*inch]
+        table = Table(table_data, colWidths=col_widths, repeatRows=1)
+        table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2E7D32')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 8),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
+            ('TOPPADDING', (0, 0), (-1, 0), 8),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1),
+             [colors.HexColor('#FFFFFF'), colors.HexColor('#F5F5F5')]),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#CCCCCC')),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('TOPPADDING', (0, 1), (-1, -1), 4),
+            ('BOTTOMPADDING', (0, 1), (-1, -1), 4),
+            ('LEFTPADDING', (0, 0), (-1, -1), 6),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 6),
+        ]))
+        elements.append(table)
+
+        elements.append(Spacer(1, 0.3*inch))
+        elements.append(Paragraph(
+            'GeneApp Andina - Gestión de Criadores de Alpacas, Llamas y Ovinos',
+            ParagraphStyle('Footer', parent=styles['Normal'], fontSize=7,
+                           textColor=colors.grey, alignment=TA_CENTER)
+        ))
+        doc.build(elements)
+        buffer.seek(0)
+        response = HttpResponse(buffer.read(), content_type='application/pdf')
+        response['Content-Disposition'] = 'attachment; filename="esquilas.pdf"'
+        return response
