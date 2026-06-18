@@ -5,6 +5,7 @@ import 'package:front_genapp/ui/core/theme.dart';
 import 'package:front_genapp/ui/features/auth/providers/auth_provider.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:front_genapp/ui/features/animales/providers/animal_provider.dart';
+import 'package:share_plus/share_plus.dart' show Share, XFile;
 import 'dart:io';
 
 class ReportesScreen extends ConsumerWidget {
@@ -63,12 +64,12 @@ class ReportesScreen extends ConsumerWidget {
   Future<void> _descargar(WidgetRef ref, BuildContext context, String format) async {
     try {
       final api = ref.read(animalRepositoryProvider);
-      final dir = await getApplicationDocumentsDirectory();
+      final dir = await getTemporaryDirectory();
       final file = File('${dir.path}/animales.$format');
       await api.download('/reporte/animales/?format=$format', file.path);
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Descargado: ${file.path}')),
+        await Share.shareXFiles(
+          [XFile(file.path)], text: 'Reporte GeneApp Andina',
         );
       }
     } catch (e) {

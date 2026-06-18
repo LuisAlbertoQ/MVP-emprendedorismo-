@@ -9,9 +9,16 @@ from django.http import HttpResponse
 from drf_spectacular.utils import extend_schema, OpenApiParameter
 import csv
 import io
+from datetime import datetime
 from reportlab.lib import colors
-from reportlab.lib.pagesizes import letter
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle
+from reportlab.lib.pagesizes import letter, landscape
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import inch
+from reportlab.lib.enums import TA_CENTER, TA_RIGHT
+from reportlab.platypus import (
+    SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak,
+    PageTemplate, Frame, BaseDocTemplate
+)
 
 
 class CSVRenderer(BaseRenderer):
@@ -390,36 +397,90 @@ class ReporteView(APIView):
 
     def _generate_pdf(self, queryset):
         buffer = io.BytesIO()
-        doc = SimpleDocTemplate(buffer, pagesize=letter)
+        doc = SimpleDocTemplate(
+            buffer, pagesize=landscape(letter),
+            leftMargin=0.5*inch, rightMargin=0.5*inch,
+            topMargin=0.75*inch, bottomMargin=0.75*inch
+        )
+
+        styles = getSampleStyleSheet()
+        title_style = ParagraphStyle(
+            'CustomTitle', parent=styles['Title'],
+            fontSize=18, spaceAfter=4, textColor=colors.HexColor('#2E7D32')
+        )
+        subtitle_style = ParagraphStyle(
+            'Subtitle', parent=styles['Normal'],
+            fontSize=9, textColor=colors.grey, alignment=TA_CENTER, spaceAfter=6
+        )
+        header_style = ParagraphStyle(
+            'Header', fontSize=8, fontName='Helvetica-Bold',
+            textColor=colors.white, alignment=TA_CENTER
+        )
+        cell_style = ParagraphStyle(
+            'Cell', fontSize=7.5, leading=10
+        )
+
         elements = []
 
-        data = [['Arete', 'Nombre', 'Especie', 'Sexo', 'F. Nacimiento', 'Padre', 'Madre', 'Observaciones', 'Total Esquilas']]
+        elements.append(Paragraph('GeneApp Andina', title_style))
+        elements.append(Paragraph('Reporte de Animales', subtitle_style))
+        elements.append(Paragraph(
+            f'Generado: {datetime.now().strftime("%d/%m/%Y %H:%M")}  |  '
+            f'Total: {queryset.count()} animales',
+            subtitle_style
+        ))
+        elements.append(Spacer(1, 0.2*inch))
+
+        table_data = [[
+            'Arete', 'Nombre', 'Especie', 'Sexo', 'F. Nacimiento',
+            'Padre', 'Madre', 'Observaciones', 'Esquilas'
+        ]]
         for animal in queryset:
-            data.append([
-                animal.arete,
-                animal.nombre[:20],
-                animal.especie,
-                animal.sexo,
-                animal.fecha_nacimiento.isoformat() if animal.fecha_nacimiento else '',
-                animal.padre.arete if animal.padre else 'N/A',
-                animal.madre.arete if animal.madre else 'N/A',
-                animal.observaciones,
-                str(animal.producciones.count())
+            table_data.append([
+                Paragraph(animal.arete, cell_style),
+                Paragraph(animal.nombre[:25], cell_style),
+                Paragraph(animal.get_especie_display(), cell_style),
+                Paragraph(animal.get_sexo_display(), cell_style),
+                Paragraph(
+                    animal.fecha_nacimiento.strftime('%d/%m/%Y')
+                    if animal.fecha_nacimiento else '-', cell_style
+                ),
+                Paragraph(animal.padre.arete if animal.padre else '-', cell_style),
+                Paragraph(animal.madre.arete if animal.madre else '-', cell_style),
+                Paragraph(animal.observaciones[:30], cell_style),
+                Paragraph(str(animal.producciones.count()), ParagraphStyle(
+                    'CountCell', parent=cell_style, alignment=TA_CENTER
+                )),
             ])
 
-        table = Table(data)
+        col_widths = [0.6*inch, 1.2*inch, 0.7*inch, 0.6*inch, 0.8*inch, 0.8*inch, 0.8*inch, 1.2*inch, 0.6*inch]
+        table = Table(table_data, colWidths=col_widths, repeatRows=1)
         table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.darkgreen),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2E7D32')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
             ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, 0), 10),
-            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
-            ('GRID', (0, 0), (-1, -1), 1, colors.black)
+            ('FONTSIZE', (0, 0), (-1, 0), 8),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
+            ('TOPPADDING', (0, 0), (-1, 0), 8),
+            ('BACKGROUND', (0, 1), (-1, -1), colors.HexColor('#F5F5F5')),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.HexColor('#FFFFFF'), colors.HexColor('#F5F5F5')]),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#CCCCCC')),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('TOPPADDING', (0, 1), (-1, -1), 4),
+            ('BOTTOMPADDING', (0, 1), (-1, -1), 4),
+            ('LEFTPADDING', (0, 0), (-1, -1), 6),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 6),
         ]))
         elements.append(table)
-        doc.build(elements)
 
+        elements.append(Spacer(1, 0.3*inch))
+        elements.append(Paragraph(
+            'GeneApp Andina - Gestión de Criadores de Alpacas, Llamas y Ovinos',
+            ParagraphStyle('Footer', parent=styles['Normal'], fontSize=7,
+                           textColor=colors.grey, alignment=TA_CENTER)
+        ))
+
+        doc.build(elements)
         buffer.seek(0)
         response = HttpResponse(buffer.read(), content_type='application/pdf')
         response['Content-Disposition'] = 'attachment; filename="animales.pdf"'
