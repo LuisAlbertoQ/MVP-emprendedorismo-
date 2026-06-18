@@ -125,8 +125,10 @@ Servidor disponible en: `http://localhost:8000`
 
 | Método | Endpoint | Descripción | Planes |
 |--------|----------|-------------|--------|
-| GET | `animales/?format=csv` | Descargar CSV (incluye columna **Total Esquilas**) | Básico/Criador |
-| GET | `animales/?format=pdf` | Descargar PDF (incluye columna **Total Esquilas**) | Básico/Criador |
+| GET | `animales/?format=csv` | Descargar CSV de animales (incluye columna **Total Esquilas**) | Básico/Criador |
+| GET | `animales/?format=pdf` | Descargar PDF de animales (diseño profesional, landscape) | Básico/Criador |
+| GET | `esquilas/?format=csv` | **Descargar CSV de esquilas** (arete, animal, especie, fecha, peso, rendimiento) | Básico/Criador |
+| GET | `esquilas/?format=pdf` | **Descargar PDF de esquilas** (diseño profesional, landscape) | Básico/Criador |
 
 ### Documentación
 
@@ -149,8 +151,10 @@ Servidor disponible en: `http://localhost:8000`
 | Árbol genealógico (2-3 gen) | ✅ Completo |
 | **CRUD de producciones (esquilas)** | ✅ **Nuevo** |
 | **Sincronización offline de producciones** | ✅ **Nuevo** |
+| **Reporte de esquilas CSV/PDF** | ✅ **Nuevo** |
 | **Total esquilas en reportes CSV/PDF** | ✅ **Nuevo** |
 | **Foto con URL absoluta (visible en app)** | ✅ **Mejorado** |
+| **PDF con diseño profesional** | ✅ **Mejorado** |
 | Reportes CSV/PDF | ✅ Completo |
 | Sincronización offline | ✅ Completo |
 | Búsqueda por arete/nombre | ✅ Completo |

@@ -28,7 +28,7 @@ Los criadores de la región andina (Perú, Bolivia, Ecuador) enfrentan:
 5. **Buscar y filtrar** animales por especie, sexo, categoría de edad o por nombre/arete
 6. **Dashboard** con resumen: total de animales, machos, hembras, desglose por especie
 7. **Planes de suscripción** (Gratuito, Básico, Criador) que controlan el límite de animales
-8. **Reportes** en CSV y PDF exportables con total de esquilas por animal (planes pagos)
+8. **Reportes** de animales y esquilas en CSV/PDF exportables y compartibles (planes pagos)
 9. **Autenticación JWT** con refresh automático
 10. **Sincronización offline** total — animales y producciones
 
@@ -64,7 +64,7 @@ Los criadores de la región andina (Perú, Bolivia, Ecuador) enfrentan:
 7. Revisa el **historial productivo** para identificar a los mejores reproductores
 8. **Filtra y busca** animales en la lista principal
 9. Si necesita más capacidad, **cambia de plan** desde el perfil
-10. Los planes pagos permiten **exportar reportes** CSV/PDF con total de esquilas
+10. Los planes pagos permiten **exportar y compartir reportes** CSV/PDF de animales y esquilas
 
 ## Funcionalidades
 
@@ -125,7 +125,10 @@ Los criadores de la región andina (Perú, Bolivia, Ecuador) enfrentan:
 | Criador | S/ 19.90/mes | 500 | 3 | Nube | ✅ CSV/PDF |
 
 ### Reportes
-- Descarga de lista de animales en CSV (tabla) o PDF
+- **Animales**: descarga CSV o PDF con lista completa de animales, incluye columna **Total Esquilas**
+- **Producción**: descarga CSV o PDF con historial de esquilas (arete del animal, fecha, peso del vellón, rendimiento, observaciones)
+- PDF con diseño profesional: orientación horizontal (landscape), colores alternados, encabezado con logo/marca, fecha de generación
+- Todos los reportes se abren con el **Share sheet** del sistema para guardar en Descargas, enviar por WhatsApp, Drive, etc.
 - Solo disponible para planes Básico y Criador
 
 ## Tecnologías
@@ -272,7 +275,10 @@ Funcionalidades implementadas:
 | Sincronización offline de producciones | ✅ |
 | Total esquilas en reportes CSV/PDF | ✅ |
 | Foto visible en detalle del animal | ✅ |
-| Reportes CSV/PDF | ✅ |
+| Reporte de animales CSV/PDF (con Total Esquilas) | ✅ |
+| Reporte de esquilas CSV/PDF (historial productivo) | ✅ |
+| PDF con diseño profesional (landscape, colores) | ✅ |
+| Compartir reportes por Share sheet | ✅ |
 | Sincronización offline | ✅ |
 | Soft delete | ✅ |
 | Carga de fotos | ✅ |

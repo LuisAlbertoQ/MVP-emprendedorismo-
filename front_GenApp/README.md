@@ -10,7 +10,8 @@ Aplicación móvil para gestión de criadores de alpacas, llamas y ovinos. Inclu
 - **Dio** — HTTP con interceptor JWT + refresh automático
 - **flutter_secure_storage** — tokens JWT almacenados seguros
 - **intl** — formato de fechas
-- **path_provider** — descarga de reportes
+- **path_provider** — almacenamiento temporal para reportes
+- **share_plus** — compartir reportes (PDF/CSV) por WhatsApp, Drive, etc.
 - **image_picker** — selección de fotos desde galería
 
 ## Requisitos
@@ -122,7 +123,11 @@ lib/
 - Cerrar sesión
 
 ### Reportes
-- Descarga CSV/PDF (solo planes Básico/Criador)
+- **Animales**: descarga CSV o PDF con lista completa de animales (incluye Total Esquilas)
+- **Producción**: descarga CSV o PDF con historial de esquilas (arete, animal, fecha, peso, rendimiento)
+- Todos los reportes se abren con el **Share sheet** del sistema para guardar o compartir
+- Solo disponible para planes Básico/Criador
+- PDF con diseño profesional: orientación horizontal, colores alternados, título, fecha de generación
 
 ## Tests
 

@@ -563,7 +563,7 @@ class ReporteProduccionView(APIView):
         elements.append(Spacer(1, 0.2*inch))
 
         table_data = [[
-            'Arete', 'Animal', 'Especie', 'Fecha Esquila',
+            'Arete', 'Nombre', 'Especie', 'Fecha Esquila',
             'Peso (kg)', 'Rend. (%)', 'Observaciones'
         ]]
         for p in queryset:
