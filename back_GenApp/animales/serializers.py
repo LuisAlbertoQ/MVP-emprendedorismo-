@@ -107,6 +107,8 @@ class AnimalSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError(
                     f'Ya existe un animal registrado con el arete "{value}".'
                 )
+        elif value != self.instance.arete:
+            raise serializers.ValidationError('El arete no puede modificarse después de creado')
         if len(value) > 50:
             raise serializers.ValidationError('El arete no puede tener más de 50 caracteres')
         return value
@@ -297,18 +299,21 @@ class ProduccionSerializer(serializers.ModelSerializer):
                 'peso_vellon_limpio_kg': 'El peso del vellón limpio no puede ser mayor al peso del vellón sucio'
             })
 
+        animal = (
+            data.get('animal')
+            or (self.instance.animal if self.instance else None)
+            or self.context.get('animal')
+        )
         fecha_esquila = data.get('fecha_esquila', self.instance.fecha_esquila if self.instance else None)
-        animal = data.get('animal', self.instance.animal if self.instance else None)
         if animal and fecha_esquila and animal.fecha_nacimiento and fecha_esquila < animal.fecha_nacimiento:
             raise serializers.ValidationError({
                 'fecha_esquila': 'La fecha de esquila no puede ser anterior a la fecha de nacimiento del animal'
             })
 
-        animal_obj = animal or (self.instance.animal if self.instance else None)
-        if animal_obj:
+        if animal:
             numero_esquila = data.get('numero_esquila', self.instance.numero_esquila if self.instance else None)
             if numero_esquila is not None:
-                qs = Produccion.objects.filter(animal=animal_obj, numero_esquila=numero_esquila)
+                qs = Produccion.objects.filter(animal=animal, numero_esquila=numero_esquila)
                 if self.instance:
                     qs = qs.exclude(pk=self.instance.pk)
                 if qs.exists():

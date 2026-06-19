@@ -5,7 +5,11 @@ class ApiService {
   late final Dio _dio;
   final FlutterSecureStorage _storage = const FlutterSecureStorage();
 
-  static const String _baseUrl = 'http://10.0.2.2:8000/api/v1';
+  static String get _baseUrl {
+    const ip = String.fromEnvironment('API_HOST');
+    if (ip.isNotEmpty) return 'http://$ip:8000/api/v1';
+    return 'http://10.0.2.2:8000/api/v1';
+  }
   static const String _accessKey = 'jwt_access';
   static const String _refreshKey = 'jwt_refresh';
 
@@ -91,28 +95,44 @@ class ApiService {
 
   Future<String?> getAccessToken() => _storage.read(key: _accessKey);
 
+  Map<String, dynamic> _toMap(dynamic data) {
+    if (data is Map<String, dynamic>) return data;
+    throw DioException(
+      requestOptions: RequestOptions(path: ''),
+      message: 'Respuesta inesperada del servidor',
+    );
+  }
+
+  List<dynamic> _toList(dynamic data) {
+    if (data is List<dynamic>) return data;
+    throw DioException(
+      requestOptions: RequestOptions(path: ''),
+      message: 'Respuesta inesperada del servidor',
+    );
+  }
+
   Future<Map<String, dynamic>> post(
       String path, Map<String, dynamic> data) async {
     final response = await _dio.post(path, data: data);
-    return response.data as Map<String, dynamic>;
+    return _toMap(response.data);
   }
 
   Future<Map<String, dynamic>> get(String path,
       {Map<String, dynamic>? queryParameters}) async {
     final response = await _dio.get(path, queryParameters: queryParameters);
-    return response.data as Map<String, dynamic>;
+    return _toMap(response.data);
   }
 
   Future<List<dynamic>> getList(String path,
       {Map<String, dynamic>? queryParameters}) async {
     final response = await _dio.get(path, queryParameters: queryParameters);
-    return response.data as List<dynamic>;
+    return _toList(response.data);
   }
 
   Future<Map<String, dynamic>> patch(
       String path, Map<String, dynamic> data) async {
     final response = await _dio.patch(path, data: data);
-    return response.data as Map<String, dynamic>;
+    return _toMap(response.data);
   }
 
   Future<Map<String, dynamic>> patchMultipart(
@@ -122,7 +142,7 @@ class ApiService {
       'foto': await MultipartFile.fromFile(filePath),
     });
     final response = await _dio.patch(path, data: formData);
-    return response.data as Map<String, dynamic>;
+    return _toMap(response.data);
   }
 
   Future<void> delete(String path) async {

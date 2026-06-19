@@ -129,7 +129,7 @@ class Produccion(models.Model):
 
     @property
     def rendimiento_pct(self):
-        if self.peso_vellon_sucio_kg and self.peso_vellon_limpio_kg:
+        if self.peso_vellon_sucio_kg and self.peso_vellon_sucio_kg > 0 and self.peso_vellon_limpio_kg:
             raw = (self.peso_vellon_limpio_kg / self.peso_vellon_sucio_kg) * 100
             return round(raw, 2)
         return None

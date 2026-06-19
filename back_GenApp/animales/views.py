@@ -3,7 +3,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.renderers import BaseRenderer
-from django.db.models import Q, Count
+from django.db.models import Q, Count, Value, IntegerField
 from django.utils import timezone
 from django.http import HttpResponse
 from drf_spectacular.utils import extend_schema, OpenApiParameter
@@ -147,7 +147,7 @@ class AnimalViewSet(viewsets.ModelViewSet):
         if request.method == 'POST':
             serializer = ProduccionSerializer(
                 data=request.data,
-                context={'request': request}
+                context={'request': request, 'animal': animal}
             )
             serializer.is_valid(raise_exception=True)
             serializer.save(animal=animal, sync_status=SyncStatus.SIC)
@@ -375,7 +375,9 @@ class ReporteView(APIView):
         especie = request.query_params.get('especie')
         sexo = request.query_params.get('sexo')
 
-        queryset = Animal.objects.filter(usuario=request.user, estado='VIVO')
+        queryset = Animal.objects.filter(usuario=request.user, estado='VIVO').annotate(
+            producciones_count=Count('producciones')
+        ).select_related('padre', 'madre')
         if especie:
             queryset = queryset.filter(especie=especie)
         if sexo:
@@ -402,7 +404,7 @@ class ReporteView(APIView):
                 animal.padre.arete if animal.padre else 'N/A',
                 animal.madre.arete if animal.madre else 'N/A',
                 animal.observaciones,
-                animal.producciones.count()
+                animal.producciones_count
             ])
         return response
 
@@ -459,7 +461,7 @@ class ReporteView(APIView):
                 Paragraph(animal.padre.arete if animal.padre else '-', cell_style),
                 Paragraph(animal.madre.arete if animal.madre else '-', cell_style),
                 Paragraph(animal.observaciones[:30], cell_style),
-                Paragraph(str(animal.producciones.count()), ParagraphStyle(
+                Paragraph(str(animal.producciones_count), ParagraphStyle(
                     'CountCell', parent=cell_style, alignment=TA_CENTER
                 )),
             ])
