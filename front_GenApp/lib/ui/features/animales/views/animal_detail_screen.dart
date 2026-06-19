@@ -4,7 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:front_genapp/data/models/produccion_model.dart';
 import 'package:front_genapp/ui/features/animales/providers/animal_provider.dart';
-import 'package:front_genapp/data/models/animal_model.dart' show AnimalModel, categoriaEdadLabel;
+import 'package:front_genapp/data/models/animal_model.dart' show AnimalModel, categoriaEdadLabel, estadoLabel;
 import 'package:front_genapp/ui/core/constants.dart';
 import 'package:front_genapp/ui/core/theme.dart';
 import 'package:front_genapp/ui/features/animales/views/produccion_form_sheet.dart';
@@ -21,7 +21,7 @@ class AnimalDetailScreen extends ConsumerWidget {
         data: (a) => FloatingActionButton(
           heroTag: 'add_produccion',
           child: const Icon(Icons.add),
-          onPressed: () => _showForm(context, ref, a.uid),
+          onPressed: () => _showForm(context, a.uid, a.fechaNacimiento),
         ),
         orElse: () => null,
       ),
@@ -33,14 +33,14 @@ class AnimalDetailScreen extends ConsumerWidget {
     );
   }
 
-  void _showForm(BuildContext context, WidgetRef ref, String animalUid) {
+  void _showForm(BuildContext context, String animalUid, DateTime animalFechaNacimiento) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
-      builder: (_) => ProduccionFormSheet(animalUid: animalUid),
+      builder: (_) => ProduccionFormSheet(animalUid: animalUid, animalFechaNacimiento: animalFechaNacimiento),
     );
   }
 }
@@ -143,6 +143,7 @@ class _ProduccionSection extends ConsumerWidget {
       builder: (_) => ProduccionFormSheet(
         animalUid: animal.uid,
         produccion: p,
+        animalFechaNacimiento: animal.fechaNacimiento,
       ),
     );
   }
@@ -211,8 +212,10 @@ class _ProduccionItem extends StatelessWidget {
                         ?.copyWith(fontWeight: FontWeight.w600)),
                 const SizedBox(height: 2),
                 Text(
-                  '${produccion.pesoVellonKg.toStringAsFixed(2)} kg'
-                  '${produccion.rendimientoPct != null ? ' · ${produccion.rendimientoPct!.toStringAsFixed(1)}%' : ''}',
+                  '${produccion.pesoVellonSucioKg.toStringAsFixed(2)} kg sucio'
+                  '${produccion.pesoVellonLimpioKg != null ? ' · ${produccion.pesoVellonLimpioKg!.toStringAsFixed(2)} kg limpio' : ''}'
+                  '${produccion.rendimientoPct != null ? ' · ${produccion.rendimientoPct!.toStringAsFixed(1)}%' : ''}'
+                  '${produccion.numeroEsquila != null ? ' · N° ${produccion.numeroEsquila}' : ''}',
                   style: theme.textTheme.bodySmall
                       ?.copyWith(color: Colors.grey.shade600),
                 ),
@@ -358,6 +361,29 @@ class _InfoSection extends StatelessWidget {
               value: animal.raza.isNotEmpty ? animal.raza : '—',
             ),
             _InfoRow(
+              icon: Icons.info_outline,
+              label: 'Estado',
+              value: estadoLabel(animal.estado),
+              valueColor: animal.estado == 'VIVO'
+                  ? Colors.green
+                  : animal.estado == 'VENDIDO'
+                      ? Colors.orange
+                      : Colors.red,
+            ),
+            if (animal.motivoEstado.isNotEmpty)
+              _InfoRow(
+                icon: Icons.notes,
+                label: 'Motivo',
+                value: animal.motivoEstado,
+              ),
+            _InfoRow(
+              icon: Icons.monitor_weight,
+              label: 'Peso Nac.',
+              value: animal.pesoNacimientoKg != null
+                  ? '${animal.pesoNacimientoKg!.toStringAsFixed(2)} kg'
+                  : '—',
+            ),
+            _InfoRow(
               icon: Icons.calendar_today,
               label: 'Nacimiento',
               value: DateFormat('dd/MM/yyyy').format(animal.fechaNacimiento),
@@ -378,8 +404,9 @@ class _InfoRow extends StatelessWidget {
   final IconData icon;
   final String label;
   final String value;
+  final Color? valueColor;
   const _InfoRow(
-      {required this.icon, required this.label, required this.value});
+      {required this.icon, required this.label, required this.value, this.valueColor});
 
   @override
   Widget build(BuildContext context) {
@@ -402,7 +429,7 @@ class _InfoRow extends StatelessWidget {
                 style: Theme.of(context)
                     .textTheme
                     .bodyMedium
-                    ?.copyWith(fontWeight: FontWeight.w600)),
+                    ?.copyWith(fontWeight: FontWeight.w600, color: valueColor)),
           ),
         ],
       ),

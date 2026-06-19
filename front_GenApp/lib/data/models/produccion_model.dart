@@ -2,8 +2,9 @@ class ProduccionModel {
   final String uid;
   final String animalUid;
   final DateTime fechaEsquila;
-  final double pesoVellonKg;
-  final double? rendimientoPct;
+  final double pesoVellonSucioKg;
+  final double? pesoVellonLimpioKg;
+  final int? numeroEsquila;
   final String observaciones;
   final String syncStatus;
   final DateTime? createdAt;
@@ -13,31 +14,42 @@ class ProduccionModel {
     required this.uid,
     required this.animalUid,
     required this.fechaEsquila,
-    required this.pesoVellonKg,
-    this.rendimientoPct,
+    required this.pesoVellonSucioKg,
+    this.pesoVellonLimpioKg,
+    this.numeroEsquila,
     this.observaciones = '',
     this.syncStatus = 'sincronizado',
     this.createdAt,
     this.updatedAt,
   });
 
+  double? get rendimientoPct {
+    if (pesoVellonSucioKg > 0 && pesoVellonLimpioKg != null) {
+      return (pesoVellonLimpioKg! / pesoVellonSucioKg) * 100;
+    }
+    return null;
+  }
+
   factory ProduccionModel.fromJson(Map<String, dynamic> json) {
+    DateTime? parseDate(dynamic value) {
+      if (value == null) return null;
+      if (value is String) return DateTime.tryParse(value);
+      return null;
+    }
+
     return ProduccionModel(
-      uid: json['uid'] as String,
-      animalUid: json['animal_uid'] as String,
-      fechaEsquila: DateTime.parse(json['fecha_esquila'] as String),
-      pesoVellonKg: double.parse(json['peso_vellon_kg'].toString()),
-      rendimientoPct: json['rendimiento_pct'] != null
-          ? double.parse(json['rendimiento_pct'].toString())
+      uid: json['uid'] as String? ?? '',
+      animalUid: json['animal_uid'] as String? ?? '',
+      fechaEsquila: parseDate(json['fecha_esquila']) ?? DateTime.now(),
+      pesoVellonSucioKg: double.tryParse(json['peso_vellon_sucio_kg']?.toString() ?? '') ?? 0,
+      pesoVellonLimpioKg: json['peso_vellon_limpio_kg'] != null
+          ? double.tryParse(json['peso_vellon_limpio_kg'].toString())
           : null,
+      numeroEsquila: json['numero_esquila'] as int?,
       observaciones: json['observaciones'] as String? ?? '',
       syncStatus: json['sync_status'] as String? ?? 'sincronizado',
-      createdAt: json['created_at'] != null
-          ? DateTime.tryParse(json['created_at'] as String)
-          : null,
-      updatedAt: json['updated_at'] != null
-          ? DateTime.tryParse(json['updated_at'] as String)
-          : null,
+      createdAt: parseDate(json['created_at']),
+      updatedAt: parseDate(json['updated_at']),
     );
   }
 
@@ -45,8 +57,9 @@ class ProduccionModel {
     return {
       'uid': uid,
       'fecha_esquila': fechaEsquila.toIso8601String().split('T')[0],
-      'peso_vellon_kg': pesoVellonKg,
-      'rendimiento_pct': rendimientoPct,
+      'peso_vellon_sucio_kg': pesoVellonSucioKg,
+      'peso_vellon_limpio_kg': pesoVellonLimpioKg,
+      'numero_esquila': numeroEsquila,
       'observaciones': observaciones,
     };
   }
@@ -55,8 +68,9 @@ class ProduccionModel {
     String? uid,
     String? animalUid,
     DateTime? fechaEsquila,
-    double? pesoVellonKg,
-    double? rendimientoPct,
+    double? pesoVellonSucioKg,
+    double? pesoVellonLimpioKg,
+    int? numeroEsquila,
     String? observaciones,
     String? syncStatus,
   }) {
@@ -64,8 +78,9 @@ class ProduccionModel {
       uid: uid ?? this.uid,
       animalUid: animalUid ?? this.animalUid,
       fechaEsquila: fechaEsquila ?? this.fechaEsquila,
-      pesoVellonKg: pesoVellonKg ?? this.pesoVellonKg,
-      rendimientoPct: rendimientoPct ?? this.rendimientoPct,
+      pesoVellonSucioKg: pesoVellonSucioKg ?? this.pesoVellonSucioKg,
+      pesoVellonLimpioKg: pesoVellonLimpioKg ?? this.pesoVellonLimpioKg,
+      numeroEsquila: numeroEsquila ?? this.numeroEsquila,
       observaciones: observaciones ?? this.observaciones,
       syncStatus: syncStatus ?? this.syncStatus,
       createdAt: createdAt,
@@ -78,8 +93,9 @@ class ProduccionModel {
       'uid': uid,
       'animal_uid': animalUid,
       'fecha_esquila': fechaEsquila.toIso8601String().split('T')[0],
-      'peso_vellon_kg': pesoVellonKg,
-      'rendimiento_pct': rendimientoPct,
+      'peso_vellon_sucio_kg': pesoVellonSucioKg,
+      'peso_vellon_limpio_kg': pesoVellonLimpioKg,
+      'numero_esquila': numeroEsquila,
       'observaciones': observaciones,
       'action': action,
     };
@@ -90,8 +106,9 @@ class ProduccionSyncChange {
   final String uid;
   final String animalUid;
   final DateTime fechaEsquila;
-  final double pesoVellonKg;
-  final double? rendimientoPct;
+  final double pesoVellonSucioKg;
+  final double? pesoVellonLimpioKg;
+  final int? numeroEsquila;
   final String observaciones;
   final String syncStatus;
   final DateTime? updatedAt;
@@ -100,27 +117,33 @@ class ProduccionSyncChange {
     required this.uid,
     required this.animalUid,
     required this.fechaEsquila,
-    required this.pesoVellonKg,
-    this.rendimientoPct,
+    required this.pesoVellonSucioKg,
+    this.pesoVellonLimpioKg,
+    this.numeroEsquila,
     this.observaciones = '',
     this.syncStatus = 'sincronizado',
     this.updatedAt,
   });
 
   factory ProduccionSyncChange.fromJson(Map<String, dynamic> json) {
+    DateTime? parseDate(dynamic value) {
+      if (value == null) return null;
+      if (value is String) return DateTime.tryParse(value);
+      return null;
+    }
+
     return ProduccionSyncChange(
-      uid: json['uid'] as String,
-      animalUid: json['animal_uid'] as String,
-      fechaEsquila: DateTime.parse(json['fecha_esquila'] as String),
-      pesoVellonKg: double.parse(json['peso_vellon_kg'].toString()),
-      rendimientoPct: json['rendimiento_pct'] != null
-          ? double.parse(json['rendimiento_pct'].toString())
+      uid: json['uid'] as String? ?? '',
+      animalUid: json['animal_uid'] as String? ?? '',
+      fechaEsquila: parseDate(json['fecha_esquila']) ?? DateTime.now(),
+      pesoVellonSucioKg: double.tryParse(json['peso_vellon_sucio_kg']?.toString() ?? '') ?? 0,
+      pesoVellonLimpioKg: json['peso_vellon_limpio_kg'] != null
+          ? double.tryParse(json['peso_vellon_limpio_kg'].toString())
           : null,
+      numeroEsquila: json['numero_esquila'] as int?,
       observaciones: json['observaciones'] as String? ?? '',
       syncStatus: json['sync_status'] as String? ?? 'sincronizado',
-      updatedAt: json['updated_at'] != null
-          ? DateTime.tryParse(json['updated_at'] as String)
-          : null,
+      updatedAt: parseDate(json['updated_at']),
     );
   }
 }

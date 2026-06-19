@@ -60,13 +60,41 @@ class _ArbolNodeWidget extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                node.nombre.isNotEmpty
-                    ? '${node.arete} - ${node.nombre}'
-                    : node.arete,
-                style: theme.textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      node.nombre.isNotEmpty
+                          ? '${node.arete} - ${node.nombre}'
+                          : node.arete,
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: node.estado == 'VIVO'
+                          ? Colors.green.shade100
+                          : node.estado == 'VENDIDO'
+                              ? Colors.orange.shade100
+                              : Colors.red.shade100,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      _estadoLabel(node.estado),
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        fontWeight: FontWeight.w600,
+                        color: node.estado == 'VIVO'
+                            ? Colors.green.shade800
+                            : node.estado == 'VENDIDO'
+                                ? Colors.orange.shade800
+                                : Colors.red.shade800,
+                      ),
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 4),
               Text(
@@ -130,6 +158,19 @@ class _ArbolNodeWidget extends StatelessWidget {
   }
 
   String _sexoLabel(String s) => s == 'macho' ? 'Macho' : 'Hembra';
+
+  String _estadoLabel(String e) {
+    switch (e) {
+      case 'VIVO':
+        return 'Vivo';
+      case 'VENDIDO':
+        return 'Vendido';
+      case 'MUERTO':
+        return 'Muerto';
+      default:
+        return e;
+    }
+  }
 }
 
 class _ParentSection extends StatelessWidget {

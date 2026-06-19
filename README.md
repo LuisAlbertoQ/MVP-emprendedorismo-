@@ -2,9 +2,15 @@
 
 Aplicación móvil + API para que pequeños y medianos criadores de alpacas, llamas y ovinos puedan **digitalizar el registro genealógico de su ganado**, reemplazando las libretas de campo y hojas de cálculo.
 
-> **Nuevo:** Historial productivo por animal — ahora puedes registrar esquilas (fecha, peso del vellón, rendimiento) para llevar un historial de producción de fibra por animal.
-> 
-> > **Nuevo:** Clasificación etaria automática — el sistema calcula la categoría de edad de cada animal (Cría, Tui Menor, Tui Mayor, Borrego, Adulto) en tiempo real según su especie y fecha de nacimiento, sin almacenarla en la base de datos.
+> **Nuevo:** Estado del animal (Vivo/Vendido/Muerto) con motivo y fecha del cambio — la lista muestra todos los animales por defecto, filtro por estado disponible.
+> > 
+> > **Nuevo:** Rendimiento de esquila calculado en vivo (vellón limpio / sucio × 100) — ya no se almacena en BD.
+> > 
+> > **Nuevo:** Número de esquila obligatorio y único por animal, orden ascendente.
+> > 
+> > **Nuevo:** Peso al nacer (`peso_nacimiento_kg`) registrable desde el formulario.
+> > 
+> > > **Nuevo:** Validaciones completas — peso limpio ≤ sucio, fecha esquila ≥ nacimiento, peso nacimiento > 0, fromJson con tryParse, max_length en Sync.
 
 ## Problema
 
@@ -74,17 +80,19 @@ Los criadores de la región andina (Perú, Bolivia, Ecuador) enfrentan:
 - Persistencia segura de tokens en el dispositivo
 
 ### Gestión de animales
-- CRUD completo: crear, ver detalle, editar, eliminar (borrado lógico)
-- Campos: arete, nombre, especie (alpaca/llama/ovino), sexo, raza, fecha de nacimiento, foto, observaciones
+- CRUD completo: crear, ver detalle, editar, eliminar (cambio de estado a Vendido)
+- Campos: arete, nombre, especie (alpaca/llama/ovino), sexo, raza, fecha de nacimiento, foto, observaciones, **peso al nacer (kg)**
+- **Estado**: Vivo / Vendido / Muerto con motivo y fecha del cambio
 - Asignación de padre y madre desde un buscador modal con filtro por especie y visualización de categoría de edad
-- Validación: el padre debe ser macho, la madre hembra, los padres no pueden ser el mismo animal
+- Validación: el padre debe ser macho, la madre hembra, los padres no pueden ser el mismo animal, padres deben haber nacido antes que el hijo
 - **Categoría de edad calculada automáticamente** (Cría / Tui Menor / Tui Mayor / Borrego / Adulto) según especie y fecha de nacimiento
-- Validación parental por edad en meses (el padre debe tener más meses que el hijo, no solo fecha posterior)
+- Validación parental por fecha de nacimiento directa (padre debe haber nacido antes que el hijo)
 - **Foto visible en el detalle del animal** (header con imagen de red)
 
 ### Producción (historial de esquilas)
 - Cada animal puede tener **múltiples registros de esquila** (relación 1 a N)
-- Campos: fecha de esquila (DatePicker), peso del vellón (kg), rendimiento (%), observaciones
+- Campos: fecha de esquila (DatePicker), **peso vellón sucio (kg)** (obligatorio), **peso vellón limpio (kg)** (opcional), **número de esquila** (único por animal, orden ascendente), observaciones
+- **Rendimiento (%) calculado automáticamente** en vivo: `vellón_limpio / vellón_sucio × 100` — no se almacena en BD
 - CRUD completo desde el detalle del animal: listar, crear, editar, eliminar
 - Lista con FAB flotante para agregar nueva esquila
 - Sincronización offline: los cambios de producciones viajan junto con los animales en el endpoint `/sync/`
@@ -93,6 +101,7 @@ Los criadores de la región andina (Perú, Bolivia, Ecuador) enfrentan:
 ### Árbol genealógico
 - Vista vertical indentada con líneas conectoras
 - Color por profundidad: verde (raíz), azul (padres), gris (abuelos)
+- Cada nodo muestra **estado** (badge verde/naranja/rojo) junto al nombre
 - Cada nivel se indentda 24px para legibilidad en pantallas chicas
 - Máximo de generaciones según el plan (2 gratuito, 3 pagos)
 
@@ -236,21 +245,20 @@ La app apunta a `http://10.0.2.2:8000` (Android emulator). Para iOS físico, cam
 
 ## Tests
 
-### Backend — 77 tests
+### Backend — 61 tests
 ```bash
 cd back_GenApp
 .\env\Scripts\python.exe manage.py test
 ```
-Cubren: modelos, serializers, CRUD, validación padres, límites por plan, árbol genealógico, sincronización, categoría de edad, **producción (16 tests: modelo, endpoints anidados, standalone, sync, validaciones)**.
+Cubren: modelos, serializers, CRUD, validación padres (especie, sexo, fecha nacimiento), límites por plan, árbol genealógico, sincronización (animales + producciones), categoría de edad, producción (CRUD anidado, standalone, sync).
 
-### Frontend — 27 tests
+### Frontend
 ```bash
 cd front_genapp
 flutter test
 flutter analyze  # 0 issues
 ```
 Cubren: modelos (fromJson/toJson), estados (copyWith), widgets (LoadingButton), integración.
-**Backend 77 + Frontend 27 = 104 tests total.**
 
 ## Estado del proyecto
 
@@ -280,7 +288,15 @@ Funcionalidades implementadas:
 | PDF con diseño profesional (landscape, colores) | ✅ |
 | Compartir reportes por Share sheet | ✅ |
 | Sincronización offline | ✅ |
-| Soft delete | ✅ |
+| Estado animal (Vivo/Vendido/Muerto + motivo + fecha) | ✅ |
+| Filtro por estado en lista | ✅ |
+| Peso al nacer (kg) | ✅ |
+| Peso vellón sucio + limpio en esquilas | ✅ |
+| Número de esquila único por animal | ✅ |
+| Rendimiento calculado en vivo | ✅ |
+| Validaciones backend: peso limpio ≤ sucio, fecha ≥ nacimiento, peso nacimiento > 0 | ✅ |
+| Validaciones frontend: fromJson con tryParse, max_length, formularios | ✅ |
+| Sync con validación de límite de animales y sexo de padres | ✅ |
 | Carga de fotos | ✅ |
 | Confirmación de contraseña en registro | ✅ |
 | Deslizar para eliminar en lista | ✅ |

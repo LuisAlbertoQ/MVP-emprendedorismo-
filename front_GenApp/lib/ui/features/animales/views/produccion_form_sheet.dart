@@ -7,8 +7,9 @@ import 'package:front_genapp/ui/features/animales/providers/animal_provider.dart
 class ProduccionFormSheet extends ConsumerStatefulWidget {
   final String animalUid;
   final ProduccionModel? produccion;
+  final DateTime? animalFechaNacimiento;
   const ProduccionFormSheet(
-      {super.key, required this.animalUid, this.produccion});
+      {super.key, required this.animalUid, this.produccion, this.animalFechaNacimiento});
 
   @override
   ProduccionFormSheetState createState() => ProduccionFormSheetState();
@@ -17,52 +18,71 @@ class ProduccionFormSheet extends ConsumerStatefulWidget {
 class ProduccionFormSheetState extends ConsumerState<ProduccionFormSheet> {
   final _formKey = GlobalKey<FormState>();
   late DateTime _fechaEsquila;
-  late TextEditingController _pesoCtrl;
-  late TextEditingController _rendimientoCtrl;
+  late TextEditingController _pesoSucioCtrl;
+  late TextEditingController _pesoLimpioCtrl;
+  late TextEditingController _numeroEsquilaCtrl;
   late TextEditingController _observacionesCtrl;
   bool _saving = false;
+  String? _fechaError;
 
   @override
   void initState() {
     super.initState();
     final p = widget.produccion;
     _fechaEsquila = p?.fechaEsquila ?? DateTime.now();
-    _pesoCtrl = TextEditingController(
-        text: p != null ? p.pesoVellonKg.toString() : '');
-    _rendimientoCtrl = TextEditingController(
-        text: p?.rendimientoPct?.toString() ?? '');
+    _pesoSucioCtrl = TextEditingController(
+        text: p != null ? p.pesoVellonSucioKg.toString() : '');
+    _pesoLimpioCtrl = TextEditingController(
+        text: p?.pesoVellonLimpioKg?.toString() ?? '');
+    _numeroEsquilaCtrl = TextEditingController(
+        text: p?.numeroEsquila?.toString() ?? '');
     _observacionesCtrl = TextEditingController(text: p?.observaciones ?? '');
   }
 
   @override
   void dispose() {
-    _pesoCtrl.dispose();
-    _rendimientoCtrl.dispose();
+    _pesoSucioCtrl.dispose();
+    _pesoLimpioCtrl.dispose();
+    _numeroEsquilaCtrl.dispose();
     _observacionesCtrl.dispose();
     super.dispose();
   }
 
   Future<void> _pickDate() async {
+    final minDate = widget.animalFechaNacimiento ?? DateTime(2000);
     final picked = await showDatePicker(
       context: context,
-      initialDate: _fechaEsquila,
-      firstDate: DateTime(2000),
+      initialDate: _fechaEsquila.isBefore(minDate) ? minDate : _fechaEsquila,
+      firstDate: minDate,
       lastDate: DateTime.now(),
     );
-    if (picked != null) setState(() => _fechaEsquila = picked);
+    if (picked != null) {
+      setState(() {
+        _fechaEsquila = picked;
+        _fechaError = null;
+      });
+    }
   }
 
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
+    if (widget.animalFechaNacimiento != null &&
+        _fechaEsquila.isBefore(widget.animalFechaNacimiento!)) {
+      setState(() => _fechaError = 'No puede ser anterior al nacimiento del animal');
+      return;
+    }
     setState(() => _saving = true);
     try {
       final p = ProduccionModel(
         uid: widget.produccion?.uid ?? '',
         animalUid: widget.animalUid,
         fechaEsquila: _fechaEsquila,
-        pesoVellonKg: double.parse(_pesoCtrl.text),
-        rendimientoPct: _rendimientoCtrl.text.isNotEmpty
-            ? double.tryParse(_rendimientoCtrl.text)
+        pesoVellonSucioKg: double.parse(_pesoSucioCtrl.text),
+        pesoVellonLimpioKg: _pesoLimpioCtrl.text.isNotEmpty
+            ? double.tryParse(_pesoLimpioCtrl.text)
+            : null,
+        numeroEsquila: _numeroEsquilaCtrl.text.isNotEmpty
+            ? int.tryParse(_numeroEsquilaCtrl.text)
             : null,
         observaciones: _observacionesCtrl.text,
       );
@@ -122,9 +142,10 @@ class ProduccionFormSheetState extends ConsumerState<ProduccionFormSheet> {
               InkWell(
                 onTap: _pickDate,
                 child: InputDecorator(
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     labelText: 'Fecha de Esquila',
-                    prefixIcon: Icon(Icons.calendar_today),
+                    prefixIcon: const Icon(Icons.calendar_today),
+                    errorText: _fechaError,
                   ),
                   child: Text(
                     DateFormat('dd/MM/yyyy').format(_fechaEsquila),
@@ -134,9 +155,9 @@ class ProduccionFormSheetState extends ConsumerState<ProduccionFormSheet> {
               ),
               const SizedBox(height: 16),
               TextFormField(
-                controller: _pesoCtrl,
+                controller: _pesoSucioCtrl,
                 decoration: const InputDecoration(
-                  labelText: 'Peso del Vellón (kg)',
+                  labelText: 'Peso Vellón Sucio (kg) *',
                   prefixIcon: Icon(Icons.scale),
                 ),
                 keyboardType:
@@ -150,13 +171,43 @@ class ProduccionFormSheetState extends ConsumerState<ProduccionFormSheet> {
               ),
               const SizedBox(height: 16),
               TextFormField(
-                controller: _rendimientoCtrl,
+                controller: _pesoLimpioCtrl,
                 decoration: const InputDecoration(
-                  labelText: 'Rendimiento (%)',
-                  prefixIcon: Icon(Icons.percent),
+                  labelText: 'Peso Vellón Limpio (kg)',
+                  prefixIcon: Icon(Icons.cleaning_services),
                 ),
                 keyboardType:
                     const TextInputType.numberWithOptions(decimal: true),
+                validator: (v) {
+                  if (v != null && v.isNotEmpty) {
+                    final n = double.tryParse(v);
+                    if (n == null) return 'Debe ser un número válido';
+                    if (n <= 0) return 'Debe ser mayor a 0';
+                    if (n > 9999.99) return 'No puede superar 9999.99 kg';
+                    final sucio = double.tryParse(_pesoSucioCtrl.text);
+                    if (sucio != null && n > sucio) {
+                      return 'No puede ser mayor al peso sucio (${sucio.toStringAsFixed(2)} kg)';
+                    }
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _numeroEsquilaCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Número de Esquila',
+                  prefixIcon: Icon(Icons.tag),
+                ),
+                keyboardType: TextInputType.number,
+                validator: (v) {
+                  if (v != null && v.isNotEmpty) {
+                    final n = int.tryParse(v);
+                    if (n == null) return 'Debe ser un número entero';
+                    if (n <= 0) return 'Debe ser un entero positivo';
+                  }
+                  return null;
+                },
               ),
               const SizedBox(height: 16),
               TextFormField(

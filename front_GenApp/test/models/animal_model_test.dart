@@ -18,7 +18,7 @@ void main() {
         'madre_uid': 'madre-uid',
         'foto': null,
         'observaciones': 'Sano',
-        'activo': true,
+        'estado': 'VIVO',
         'sync_status': 'sincronizado',
         'created_at': '2024-01-15T10:00:00Z',
         'updated_at': '2024-06-01T10:00:00Z',
@@ -40,7 +40,7 @@ void main() {
       expect(model.madreUid, 'madre-uid');
       expect(model.foto, isNull);
       expect(model.observaciones, 'Sano');
-      expect(model.activo, true);
+      expect(model.estado, 'VIVO');
       expect(model.syncStatus, 'sincronizado');
       expect(model.categoriaEdad, 'adulto');
       expect(model.createdAt, DateTime.utc(2024, 1, 15, 10, 0, 0));
@@ -67,7 +67,7 @@ void main() {
       expect(model.madreUid, isNull);
       expect(model.foto, isNull);
       expect(model.observaciones, '');
-      expect(model.activo, true);
+      expect(model.estado, 'VIVO');
       expect(model.syncStatus, 'sincronizado');
       expect(model.createdAt, isNull);
       expect(model.updatedAt, isNull);
@@ -85,7 +85,7 @@ void main() {
         padreUid: 'padre-uid',
         madreUid: 'madre-uid',
         observaciones: 'Sano',
-        activo: true,
+        estado: 'VIVO',
       );
 
       final json = model.toJson();
@@ -99,7 +99,7 @@ void main() {
       expect(json['padre'], 'padre-uid');
       expect(json['madre'], 'madre-uid');
       expect(json['observaciones'], 'Sano');
-      expect(json['activo'], true);
+      expect(json['estado'], 'VIVO');
     });
 
     test('toJson includes null parent UIDs', () {

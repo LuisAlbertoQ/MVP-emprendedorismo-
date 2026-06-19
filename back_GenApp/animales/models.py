@@ -1,6 +1,7 @@
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.conf import settings
+from django.utils import timezone
 import uuid
 
 
@@ -13,6 +14,12 @@ class Especie(models.TextChoices):
 class Sexo(models.TextChoices):
     HEMBRA = 'hembra', 'Hembra'
     MACHO = 'macho', 'Macho'
+
+
+class EstadoAnimal(models.TextChoices):
+    VIVO = 'VIVO', 'Vivo'
+    VENDIDO = 'VENDIDO', 'Vendido'
+    MUERTO = 'MUERTO', 'Muerto'
 
 
 class SyncStatus(models.TextChoices):
@@ -34,11 +41,13 @@ class Animal(models.Model):
     madre = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True, related_name='hijos_maternos')
     foto = models.ImageField(upload_to='animales/', null=True, blank=True)
     observaciones = models.TextField(blank=True, default='')
-    activo = models.BooleanField(default=True)
+    estado = models.CharField(max_length=10, choices=EstadoAnimal.choices, default=EstadoAnimal.VIVO)
+    fecha_estado = models.DateTimeField(null=True, blank=True)
+    motivo_estado = models.TextField(blank=True, default='')
+    peso_nacimiento_kg = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
     sync_status = models.CharField(max_length=15, choices=SyncStatus.choices, default=SyncStatus.SIC)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    deleted_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         db_table = 'animales'
@@ -58,6 +67,15 @@ class Animal(models.Model):
         self.verificar_padres()
 
     def save(self, *args, **kwargs):
+        if self.pk:
+            try:
+                old = Animal.objects.get(pk=self.pk)
+                if old.estado != self.estado:
+                    self.fecha_estado = timezone.now()
+            except Animal.DoesNotExist:
+                pass
+        elif self.estado == EstadoAnimal.VIVO:
+            self.fecha_estado = timezone.now()
         self.full_clean()
         super().save(*args, **kwargs)
 
@@ -89,8 +107,9 @@ class Produccion(models.Model):
     uid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
     animal = models.ForeignKey(Animal, on_delete=models.CASCADE, related_name='producciones')
     fecha_esquila = models.DateField()
-    peso_vellon_kg = models.DecimalField(max_digits=6, decimal_places=2)
-    rendimiento_pct = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
+    peso_vellon_sucio_kg = models.DecimalField(max_digits=6, decimal_places=2)
+    peso_vellon_limpio_kg = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
+    numero_esquila = models.PositiveIntegerField(null=True, blank=True)
     observaciones = models.TextField(blank=True, default='')
     sync_status = models.CharField(max_length=15, choices=SyncStatus.choices, default=SyncStatus.SIC)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -100,10 +119,20 @@ class Produccion(models.Model):
         db_table = 'producciones'
         verbose_name = 'Producción'
         verbose_name_plural = 'Producciones'
-        ordering = ['-fecha_esquila']
+        ordering = ['animal', 'numero_esquila']
+        constraints = [
+            models.UniqueConstraint(fields=['animal', 'numero_esquila'], name='uq_animal_numero_esquila')
+        ]
         indexes = [
             models.Index(fields=['animal', 'fecha_esquila'], name='idx_producciones_animal_fecha'),
         ]
 
+    @property
+    def rendimiento_pct(self):
+        if self.peso_vellon_sucio_kg and self.peso_vellon_limpio_kg:
+            raw = (self.peso_vellon_limpio_kg / self.peso_vellon_sucio_kg) * 100
+            return round(raw, 2)
+        return None
+
     def __str__(self):
-        return f"{self.animal.arete} - {self.fecha_esquila} - {self.peso_vellon_kg}kg"
+        return f"{self.animal.arete} - {self.fecha_esquila} - {self.peso_vellon_sucio_kg}kg"

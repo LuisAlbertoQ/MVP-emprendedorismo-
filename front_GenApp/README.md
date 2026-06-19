@@ -50,7 +50,7 @@ lib/
 ├── app.dart                     # MaterialApp.router con tema
 ├── data/
 │   ├── models/
-│   │   ├── animal_model.dart    # AnimalModel, AnimalListModel, CandidatoModel, ArbolNode
+│   │   ├── animal_model.dart    # AnimalModel (con estado, motivoEstado, pesoNacimientoKg), AnimalListModel, CandidatoModel, ArbolNode (con estado)
 │   │   ├── produccion_model.dart # ProduccionModel, ProduccionSyncChange
 │   │   └── user_model.dart      # UserModel
 │   ├── services/
@@ -109,11 +109,11 @@ lib/
 - Acciones rápidas: nuevo animal, ver todos, reportes
 
 ### Animales
-- **Lista**: scroll infinito, filtros por especie/sexo, buscador por arete/nombre, tag de categoría de edad en cada card, deslizar para eliminar
-- **Detalle**: header con gradiente + foto, info con categoría de edad, padres tappables, observaciones, **historial de esquilas** con FAB para agregar
-- **Formulario**: crear/editar con selector de padres (buscador modal con filtro por especie y categoría de edad), carga de fotos, confirmación de contraseña
-- **Producción**: modal bottom sheet con DatePicker, peso vellón (kg), rendimiento (%), observaciones — editar/eliminar desde la lista
-- **Árbol**: vista vertical indentada con líneas conectoras
+- **Lista**: scroll infinito, filtros por especie/sexo/**estado**, buscador por arete/nombre, tag de categoría de edad en cada card, deslizar para eliminar
+- **Detalle**: header con gradiente + foto, info con categoría de edad + **estado con color**, padres tappables, observaciones, **historial de esquilas** con FAB para agregar
+- **Formulario**: crear/editar con selector de padres (buscador modal con filtro por especie y categoría de edad), carga de fotos, **dropdown de estado**, **motivo requerido si estado ≠ VIVO**, **peso al nacer**, validaciones cliente (max_length, numérico)
+- **Producción**: modal bottom sheet con DatePicker, peso vellón **sucio** (obligatorio), peso vellón **limpio** (opcional, ≤ sucio), **número de esquila** (entero positivo, único por animal), observaciones — editar/eliminar desde la lista. Validación: fecha ≥ nacimiento del animal
+- **Árbol**: vista vertical indentada con líneas conectoras, cada nodo muestra **estado** (badge verde/naranja/rojo)
 
 ### Perfil
 - Header con gradiente, avatar, nombre, teléfono
@@ -135,12 +135,7 @@ lib/
 flutter test
 ```
 
-30 tests:
-- Modelos: AnimalModel (con categoriaEdad), ProduccionModel, UserModel, CandidatoModel, ArbolNode (fromJson/toJson)
-- Estados: AuthState, AnimalListState (copyWith)
-- Widgets: LoadingButton (idle, loading, disabled)
-- Integración: LoginScreen render cuando no autenticado
-**Backend 77 + Frontend 27 = 104 tests total.**
+Cubren: modelos (fromJson/toJson con tryParse), estados (copyWith), widgets (LoadingButton), integración.
 
 ## Análisis estático
 

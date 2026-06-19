@@ -1,7 +1,7 @@
 from datetime import date
 from rest_framework import serializers
 from django.db import IntegrityError
-from .models import Animal, Especie, Sexo, Produccion
+from .models import Animal, Especie, Sexo, EstadoAnimal, Produccion
 from .utils import calcular_categoria_edad, _edad_en_meses
 
 
@@ -36,10 +36,11 @@ class AnimalSerializer(serializers.ModelSerializer):
         fields = [
             'uid', 'usuario', 'arete', 'especie', 'sexo', 'fecha_nacimiento',
             'nombre', 'raza', 'padre', 'madre', 'padre_uid', 'madre_uid',
-            'foto', 'observaciones', 'activo', 'sync_status',
+            'foto', 'observaciones', 'estado', 'fecha_estado', 'motivo_estado',
+            'peso_nacimiento_kg', 'sync_status',
             'created_at', 'updated_at', 'categoria_edad'
         ]
-        read_only_fields = ['uid', 'usuario', 'sync_status', 'created_at', 'updated_at', 'categoria_edad']
+        read_only_fields = ['uid', 'usuario', 'sync_status', 'created_at', 'updated_at', 'categoria_edad', 'fecha_estado']
 
     def get_categoria_edad(self, obj):
         return calcular_categoria_edad(obj.especie, obj.fecha_nacimiento)
@@ -62,15 +63,18 @@ class AnimalSerializer(serializers.ModelSerializer):
         if not usuario:
             raise serializers.ValidationError('Usuario no encontrado')
 
+        estado = data.get('estado', self.instance.estado if self.instance else 'VIVO')
         limite = usuario.limite_animales
-        if usuario.animales_count >= limite:
-            if self.instance is None:
+        if self.instance is None:
+            if usuario.animales_count >= limite:
                 raise serializers.ValidationError(
                     f'Has alcanzado el límite de {limite} animales de tu plan {usuario.plan}'
                 )
-            if not self.instance.activo and data.get('activo', True):
+        else:
+            old_estado = Animal.objects.get(pk=self.instance.pk).estado
+            if old_estado != 'VIVO' and estado == 'VIVO' and usuario.animales_count >= limite:
                 raise serializers.ValidationError(
-                    f'Has alcanzado el límite de {limite} animales de tu plan {usuario.plan}'
+                    f'Has alcanzado el límite de {limite} animales de tu plan {usuario.plan}. No puedes reactivar más animales.'
                 )
 
         especie = data.get('especie', self.instance.especie if self.instance else None)
@@ -83,16 +87,16 @@ class AnimalSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError({'padre': 'El padre debe ser un animal de sexo macho'})
             if especie and padre.especie != especie:
                 raise serializers.ValidationError({'padre': f'El padre debe ser de la misma especie ({padre.get_especie_display()} != {dict(Especie.choices).get(especie, especie)})'})
-            if fecha_nac and _edad_en_meses(padre.fecha_nacimiento) <= _edad_en_meses(fecha_nac):
-                raise serializers.ValidationError({'padre': 'El padre debe ser mayor que el animal según su categoría de edad'})
+            if fecha_nac and padre.fecha_nacimiento >= fecha_nac:
+                raise serializers.ValidationError({'padre': 'El padre debe haber nacido antes que el animal'})
 
         if madre:
             if madre.sexo != 'hembra':
                 raise serializers.ValidationError({'madre': 'La madre debe ser un animal de sexo hembra'})
             if especie and madre.especie != especie:
                 raise serializers.ValidationError({'madre': f'La madre debe ser de la misma especie ({madre.get_especie_display()} != {dict(Especie.choices).get(especie, especie)})'})
-            if fecha_nac and _edad_en_meses(madre.fecha_nacimiento) <= _edad_en_meses(fecha_nac):
-                raise serializers.ValidationError({'madre': 'La madre debe ser mayor que el animal según su categoría de edad'})
+            if fecha_nac and madre.fecha_nacimiento >= fecha_nac:
+                raise serializers.ValidationError({'madre': 'La madre debe haber nacido antes que el animal'})
 
         return data
 
@@ -103,6 +107,16 @@ class AnimalSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError(
                     f'Ya existe un animal registrado con el arete "{value}".'
                 )
+        if len(value) > 50:
+            raise serializers.ValidationError('El arete no puede tener más de 50 caracteres')
+        return value
+
+    def validate_peso_nacimiento_kg(self, value):
+        if value is not None:
+            if value <= 0:
+                raise serializers.ValidationError('El peso al nacer debe ser mayor a 0')
+            if value > 999.99:
+                raise serializers.ValidationError('El peso al nacer no puede superar 999.99 kg')
         return value
 
     def create(self, validated_data):
@@ -120,7 +134,7 @@ class AnimalListSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Animal
-        fields = ['uid', 'arete', 'nombre', 'especie', 'sexo', 'fecha_nacimiento', 'foto', 'categoria_edad']
+        fields = ['uid', 'arete', 'nombre', 'especie', 'sexo', 'fecha_nacimiento', 'foto', 'categoria_edad', 'estado']
 
     def get_categoria_edad(self, obj):
         return calcular_categoria_edad(obj.especie, obj.fecha_nacimiento)
@@ -136,16 +150,16 @@ class AnimalListSerializer(serializers.ModelSerializer):
 
 class SyncChangeSerializer(serializers.Serializer):
     uid = serializers.UUIDField(required=True)
-    arete = serializers.CharField()
+    arete = serializers.CharField(max_length=50)
     especie = serializers.ChoiceField(choices=Especie.choices)
     sexo = serializers.ChoiceField(choices=Sexo.choices)
     fecha_nacimiento = serializers.DateField()
-    nombre = serializers.CharField(required=False, default='')
-    raza = serializers.CharField(required=False, default='')
+    nombre = serializers.CharField(required=False, default='', max_length=100)
+    raza = serializers.CharField(required=False, default='', max_length=50)
     padre_uid = serializers.UUIDField(required=False, allow_null=True)
     madre_uid = serializers.UUIDField(required=False, allow_null=True)
     observaciones = serializers.CharField(required=False, default='')
-    activo = serializers.BooleanField(required=False, default=True)
+    estado = serializers.ChoiceField(choices=EstadoAnimal.choices, required=False, default='VIVO')
     action = serializers.ChoiceField(choices=['create', 'update', 'delete'], default='create')
     local_updated_at = serializers.DateTimeField(required=False, allow_null=True)
 
@@ -154,8 +168,9 @@ class SyncProduccionChangeSerializer(serializers.Serializer):
     uid = serializers.UUIDField(required=True)
     animal_uid = serializers.UUIDField(required=True)
     fecha_esquila = serializers.DateField()
-    peso_vellon_kg = serializers.DecimalField(max_digits=6, decimal_places=2)
-    rendimiento_pct = serializers.DecimalField(max_digits=5, decimal_places=2, required=False, allow_null=True)
+    peso_vellon_sucio_kg = serializers.DecimalField(max_digits=6, decimal_places=2)
+    peso_vellon_limpio_kg = serializers.DecimalField(max_digits=6, decimal_places=2, required=False, allow_null=True)
+    numero_esquila = serializers.IntegerField(required=False, allow_null=True)
     observaciones = serializers.CharField(required=False, default='')
     action = serializers.ChoiceField(choices=['create', 'update', 'delete'], default='create')
     local_updated_at = serializers.DateTimeField(required=False, allow_null=True)
@@ -178,7 +193,8 @@ class SyncOutputAnimalSerializer(serializers.ModelSerializer):
         fields = [
             'uid', 'arete', 'especie', 'sexo', 'fecha_nacimiento',
             'nombre', 'raza', 'padre_uid', 'madre_uid',
-            'observaciones', 'activo', 'sync_status', 'updated_at', 'deleted_at',
+            'observaciones', 'estado', 'fecha_estado', 'motivo_estado',
+            'peso_nacimiento_kg', 'sync_status', 'updated_at',
             'categoria_edad', 'foto'
         ]
 
@@ -196,14 +212,19 @@ class SyncOutputAnimalSerializer(serializers.ModelSerializer):
 
 class SyncOutputProduccionSerializer(serializers.ModelSerializer):
     animal_uid = serializers.UUIDField(source='animal.uid', read_only=True)
+    rendimiento_pct = serializers.SerializerMethodField()
 
     class Meta:
         model = Produccion
         fields = [
-            'uid', 'animal_uid', 'fecha_esquila', 'peso_vellon_kg',
+            'uid', 'animal_uid', 'fecha_esquila', 'peso_vellon_sucio_kg',
+            'peso_vellon_limpio_kg', 'numero_esquila',
             'rendimiento_pct', 'observaciones', 'sync_status',
             'updated_at'
         ]
+
+    def get_rendimiento_pct(self, obj):
+        return obj.rendimiento_pct
 
 
 class SyncOutputSerializer(serializers.Serializer):
@@ -225,28 +246,77 @@ class CandidatoSerializer(serializers.ModelSerializer):
 
 class ProduccionSerializer(serializers.ModelSerializer):
     animal_uid = serializers.SerializerMethodField()
+    rendimiento_pct = serializers.SerializerMethodField()
 
     class Meta:
         model = Produccion
         fields = [
-            'uid', 'animal_uid', 'fecha_esquila', 'peso_vellon_kg',
+            'uid', 'animal_uid', 'fecha_esquila', 'peso_vellon_sucio_kg',
+            'peso_vellon_limpio_kg', 'numero_esquila',
             'rendimiento_pct', 'observaciones', 'sync_status',
             'created_at', 'updated_at'
         ]
-        read_only_fields = ['uid', 'animal_uid', 'sync_status', 'created_at', 'updated_at']
+        read_only_fields = ['uid', 'animal_uid', 'sync_status', 'created_at', 'updated_at', 'rendimiento_pct']
 
     def get_animal_uid(self, obj):
         return str(obj.animal.uid)
+
+    def get_rendimiento_pct(self, obj):
+        return obj.rendimiento_pct
 
     def validate_fecha_esquila(self, value):
         if value > date.today():
             raise serializers.ValidationError('La fecha de esquila no puede ser futura')
         return value
 
-    def validate_peso_vellon_kg(self, value):
+    def validate_peso_vellon_sucio_kg(self, value):
         if value <= 0:
-            raise serializers.ValidationError('El peso del vellón debe ser mayor a 0')
+            raise serializers.ValidationError('El peso del vellón sucio debe ser mayor a 0')
+        if value > 9999.99:
+            raise serializers.ValidationError('El peso del vellón sucio no puede superar 9999.99 kg')
         return value
+
+    def validate_peso_vellon_limpio_kg(self, value):
+        if value is not None:
+            if value <= 0:
+                raise serializers.ValidationError('El peso del vellón limpio debe ser mayor a 0')
+            if value > 9999.99:
+                raise serializers.ValidationError('El peso del vellón limpio no puede superar 9999.99 kg')
+        return value
+
+    def validate_numero_esquila(self, value):
+        if value is not None and value <= 0:
+            raise serializers.ValidationError('El número de esquila debe ser un entero positivo')
+        return value
+
+    def validate(self, data):
+        limpio = data.get('peso_vellon_limpio_kg', self.instance.peso_vellon_limpio_kg if self.instance else None)
+        sucio = data.get('peso_vellon_sucio_kg', self.instance.peso_vellon_sucio_kg if self.instance else None)
+        if limpio is not None and sucio is not None and limpio > sucio:
+            raise serializers.ValidationError({
+                'peso_vellon_limpio_kg': 'El peso del vellón limpio no puede ser mayor al peso del vellón sucio'
+            })
+
+        fecha_esquila = data.get('fecha_esquila', self.instance.fecha_esquila if self.instance else None)
+        animal = data.get('animal', self.instance.animal if self.instance else None)
+        if animal and fecha_esquila and animal.fecha_nacimiento and fecha_esquila < animal.fecha_nacimiento:
+            raise serializers.ValidationError({
+                'fecha_esquila': 'La fecha de esquila no puede ser anterior a la fecha de nacimiento del animal'
+            })
+
+        animal_obj = animal or (self.instance.animal if self.instance else None)
+        if animal_obj:
+            numero_esquila = data.get('numero_esquila', self.instance.numero_esquila if self.instance else None)
+            if numero_esquila is not None:
+                qs = Produccion.objects.filter(animal=animal_obj, numero_esquila=numero_esquila)
+                if self.instance:
+                    qs = qs.exclude(pk=self.instance.pk)
+                if qs.exists():
+                    raise serializers.ValidationError({
+                        'numero_esquila': f'El animal ya tiene una esquila registrada con el número {numero_esquila}'
+                    })
+
+        return data
 
 
 class ReporteSerializer(serializers.Serializer):

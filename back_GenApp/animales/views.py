@@ -69,16 +69,15 @@ class AnimalViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         queryset = Animal.objects.filter(usuario=self.request.user)
         if self.action == 'list':
-            queryset = queryset.filter(activo=True)
             especie = self.request.query_params.get('especie')
             if especie:
                 queryset = queryset.filter(especie=especie)
             sexo = self.request.query_params.get('sexo')
             if sexo:
                 queryset = queryset.filter(sexo=sexo)
-            activo = self.request.query_params.get('activo')
-            if activo is not None:
-                queryset = queryset.filter(activo=activo.lower() == 'true')
+            estado = self.request.query_params.get('estado')
+            if estado:
+                queryset = queryset.filter(estado=estado.upper())
             search = self.request.query_params.get('search')
             if search:
                 queryset = queryset.filter(
@@ -90,15 +89,14 @@ class AnimalViewSet(viewsets.ModelViewSet):
         serializer.save(usuario=self.request.user, sync_status=SyncStatus.SIC)
 
     def perform_destroy(self, instance):
-        instance.activo = False
-        instance.deleted_at = timezone.now()
+        instance.estado = 'VENDIDO'
         instance.save()
 
     @extend_schema(
         parameters=[
             OpenApiParameter(name='especie', type=str),
             OpenApiParameter(name='sexo', type=str),
-            OpenApiParameter(name='activo', type=bool),
+            OpenApiParameter(name='estado', type=str),
             OpenApiParameter(name='search', type=str),
         ]
     )
@@ -119,6 +117,7 @@ class AnimalViewSet(viewsets.ModelViewSet):
                 'nombre': a.nombre,
                 'especie': a.especie,
                 'sexo': a.sexo,
+                'estado': a.estado,
                 'fecha_nacimiento': a.fecha_nacimiento.isoformat() if a.fecha_nacimiento else None,
                 'foto': request.build_absolute_uri(a.foto.url) if a.foto else None,
                 'categoria_edad': calcular_categoria_edad(a.especie, a.fecha_nacimiento),
@@ -134,7 +133,7 @@ class AnimalViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['get'])
     def candidatos(self, request):
         queryset = Animal.objects.filter(
-            usuario=request.user, activo=True
+            usuario=request.user, estado='VIVO'
         ).order_by('arete')
         especie = request.query_params.get('especie')
         if especie:
@@ -159,7 +158,7 @@ class AnimalViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['get'])
     def resumen(self, request):
-        qs = Animal.objects.filter(usuario=request.user, activo=True)
+        qs = Animal.objects.filter(usuario=request.user, estado='VIVO')
         total = qs.count()
         machos = qs.filter(sexo='macho').count()
         hembras = qs.filter(sexo='hembra').count()
@@ -211,21 +210,26 @@ class SyncView(APIView):
         created_or_updated_uids = {}
         processed_uids = []
 
+        user = request.user
+
         for change in changes:
             action = change.get('action', 'create')
             uid = change.get('uid')
 
             if action == 'delete':
                 try:
-                    animal = Animal.objects.get(uid=uid, usuario=request.user)
-                    animal.activo = False
-                    animal.deleted_at = timezone.now()
+                    animal = Animal.objects.get(uid=uid, usuario=user)
+                    animal.estado = 'VENDIDO'
                     animal.sync_status = SyncStatus.SIC
                     animal.save()
                     processed_uids.append(str(uid))
                 except Animal.DoesNotExist:
                     pass
                 continue
+
+            if action == 'create' and Animal.objects.filter(uid=uid, usuario=user).count() == 0:
+                if user.animales_count >= user.limite_animales:
+                    continue
 
             animal_data = {
                 'arete': change['arete'],
@@ -235,12 +239,12 @@ class SyncView(APIView):
                 'nombre': change.get('nombre', ''),
                 'raza': change.get('raza', ''),
                 'observaciones': change.get('observaciones', ''),
-                'activo': change.get('activo', True),
+                'estado': change.get('estado', 'VIVO'),
                 'sync_status': SyncStatus.SIC,
             }
 
             if action == 'create':
-                existing = Animal.objects.filter(uid=uid, usuario=request.user).first()
+                existing = Animal.objects.filter(uid=uid, usuario=user).first()
                 if existing:
                     if change.get('local_updated_at') and existing.updated_at < change['local_updated_at']:
                         for key, value in animal_data.items():
@@ -248,13 +252,13 @@ class SyncView(APIView):
                         existing.save()
                         created_or_updated_uids[uid] = existing
                 else:
-                    animal = Animal.objects.create(uid=uid, usuario=request.user, **animal_data)
+                    animal = Animal.objects.create(uid=uid, usuario=user, **animal_data)
                     created_or_updated_uids[uid] = animal
                 processed_uids.append(str(uid))
 
             elif action == 'update':
                 try:
-                    animal = Animal.objects.get(uid=uid, usuario=request.user)
+                    animal = Animal.objects.get(uid=uid, usuario=user)
                     local_updated = change.get('local_updated_at')
                     if not local_updated or animal.updated_at < local_updated:
                         for key, value in animal_data.items():
@@ -279,12 +283,18 @@ class SyncView(APIView):
             if padre_uid and padre_uid in created_or_updated_uids:
                 animal.padre = created_or_updated_uids[padre_uid]
             elif padre_uid:
-                animal.padre = Animal.objects.filter(uid=padre_uid, usuario=request.user).first()
+                padre = Animal.objects.filter(uid=padre_uid, usuario=user).first()
+                if padre and padre.sexo != 'macho':
+                    padre = None
+                animal.padre = padre
 
             if madre_uid and madre_uid in created_or_updated_uids:
                 animal.madre = created_or_updated_uids[madre_uid]
             elif madre_uid:
-                animal.madre = Animal.objects.filter(uid=madre_uid, usuario=request.user).first()
+                madre = Animal.objects.filter(uid=madre_uid, usuario=user).first()
+                if madre and madre.sexo != 'hembra':
+                    madre = None
+                animal.madre = madre
 
             animal.save()
 
@@ -296,18 +306,19 @@ class SyncView(APIView):
             animal_uid = change.get('animal_uid')
 
             if action == 'delete':
-                Produccion.objects.filter(uid=uid, animal__usuario=request.user).delete()
+                Produccion.objects.filter(uid=uid, animal__usuario=user).delete()
                 continue
 
             prod_data = {
                 'fecha_esquila': change['fecha_esquila'],
-                'peso_vellon_kg': change['peso_vellon_kg'],
-                'rendimiento_pct': change.get('rendimiento_pct'),
+                'peso_vellon_sucio_kg': change['peso_vellon_sucio_kg'],
+                'peso_vellon_limpio_kg': change.get('peso_vellon_limpio_kg'),
+                'numero_esquila': change.get('numero_esquila'),
                 'observaciones': change.get('observaciones', ''),
                 'sync_status': SyncStatus.SIC,
             }
 
-            animal = Animal.objects.filter(uid=animal_uid, usuario=request.user).first()
+            animal = Animal.objects.filter(uid=animal_uid, usuario=user).first()
             if not animal:
                 continue
 
@@ -318,7 +329,7 @@ class SyncView(APIView):
 
             elif action == 'update':
                 try:
-                    prod = Produccion.objects.get(uid=uid, animal__usuario=request.user)
+                    prod = Produccion.objects.get(uid=uid, animal__usuario=user)
                     local_updated = change.get('local_updated_at')
                     if not local_updated or prod.updated_at < local_updated:
                         for key, value in prod_data.items():
@@ -364,7 +375,7 @@ class ReporteView(APIView):
         especie = request.query_params.get('especie')
         sexo = request.query_params.get('sexo')
 
-        queryset = Animal.objects.filter(usuario=request.user, activo=True)
+        queryset = Animal.objects.filter(usuario=request.user, estado='VIVO')
         if especie:
             queryset = queryset.filter(especie=especie)
         if sexo:
@@ -519,7 +530,8 @@ class ReporteProduccionView(APIView):
         writer = csv.writer(response)
         writer.writerow([
             'Arete Animal', 'Nombre Animal', 'Especie', 'Fecha Esquila',
-            'Peso Vellón (kg)', 'Rendimiento (%)', 'Observaciones'
+            'Peso Sucio (kg)', 'Peso Limpio (kg)', 'N° Esquila',
+            'Rendimiento (%)', 'Observaciones'
         ])
         for p in queryset:
             writer.writerow([
@@ -527,8 +539,10 @@ class ReporteProduccionView(APIView):
                 p.animal.nombre,
                 p.animal.get_especie_display(),
                 p.fecha_esquila.strftime('%d/%m/%Y'),
-                str(p.peso_vellon_kg),
-                str(p.rendimiento_pct) if p.rendimiento_pct is not None else '',
+                str(p.peso_vellon_sucio_kg),
+                str(p.peso_vellon_limpio_kg) if p.peso_vellon_limpio_kg else '',
+                str(p.numero_esquila) if p.numero_esquila else '',
+                f'{p.rendimiento_pct:.2f}' if p.rendimiento_pct is not None else '',
                 p.observaciones,
             ])
         return response
@@ -564,7 +578,7 @@ class ReporteProduccionView(APIView):
 
         table_data = [[
             'Arete', 'Nombre', 'Especie', 'Fecha Esquila',
-            'Peso (kg)', 'Rend. (%)', 'Observaciones'
+            'P. Sucio', 'P. Limpio', 'N°', 'Rend.%', 'Obs.'
         ]]
         for p in queryset:
             table_data.append([
@@ -572,17 +586,25 @@ class ReporteProduccionView(APIView):
                 Paragraph(p.animal.nombre[:20], cell_style),
                 Paragraph(p.animal.get_especie_display(), cell_style),
                 Paragraph(p.fecha_esquila.strftime('%d/%m/%Y'), cell_style),
-                Paragraph(f'{p.peso_vellon_kg:.2f}', ParagraphStyle(
+                Paragraph(f'{p.peso_vellon_sucio_kg:.2f}', ParagraphStyle(
                     'NumCell', parent=cell_style, alignment=TA_CENTER
                 )),
                 Paragraph(
-                    f'{p.rendimiento_pct:.1f}%' if p.rendimiento_pct else '-',
+                    f'{p.peso_vellon_limpio_kg:.2f}' if p.peso_vellon_limpio_kg else '-',
+                    ParagraphStyle('NumCell2', parent=cell_style, alignment=TA_CENTER)
+                ),
+                Paragraph(
+                    str(p.numero_esquila) if p.numero_esquila else '-',
+                    ParagraphStyle('NumCell3', parent=cell_style, alignment=TA_CENTER)
+                ),
+                Paragraph(
+                    f'{p.rendimiento_pct:.1f}' if p.rendimiento_pct else '-',
                     ParagraphStyle('PctCell', parent=cell_style, alignment=TA_CENTER)
                 ),
-                Paragraph(p.observaciones[:35], cell_style),
+                Paragraph(p.observaciones[:30], cell_style),
             ])
 
-        col_widths = [0.6*inch, 1.1*inch, 0.7*inch, 0.9*inch, 0.7*inch, 0.6*inch, 1.8*inch]
+        col_widths = [0.6*inch, 1.0*inch, 0.6*inch, 0.8*inch, 0.55*inch, 0.55*inch, 0.4*inch, 0.5*inch, 1.4*inch]
         table = Table(table_data, colWidths=col_widths, repeatRows=1)
         table.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2E7D32')),

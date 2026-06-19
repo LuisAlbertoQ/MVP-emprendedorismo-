@@ -10,12 +10,14 @@ class AnimalRepository {
   Future<List<AnimalListModel>> getAnimales({
     String? especie,
     String? sexo,
+    String? estado,
     String? search,
     int page = 1,
   }) async {
     final params = <String, dynamic>{'page': page};
     if (especie != null) params['especie'] = especie;
     if (sexo != null) params['sexo'] = sexo;
+    if (estado != null) params['estado'] = estado;
     if (search != null && search.isNotEmpty) params['search'] = search;
     final data = await _api.get('/animales/', queryParameters: params);
     final results = data['results'] as List<dynamic>;

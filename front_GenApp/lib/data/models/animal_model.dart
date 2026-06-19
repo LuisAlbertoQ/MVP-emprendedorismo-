@@ -12,7 +12,10 @@ class AnimalModel {
   final String? madreUid;
   final String? foto;
   final String observaciones;
-  final bool activo;
+  final String estado;
+  final DateTime? fechaEstado;
+  final String motivoEstado;
+  final double? pesoNacimientoKg;
   final String syncStatus;
   final DateTime? createdAt;
   final DateTime? updatedAt;
@@ -32,7 +35,10 @@ class AnimalModel {
     this.madreUid,
     this.foto,
     this.observaciones = '',
-    this.activo = true,
+    this.estado = 'VIVO',
+    this.fechaEstado,
+    this.motivoEstado = '',
+    this.pesoNacimientoKg,
     this.syncStatus = 'sincronizado',
     this.createdAt,
     this.updatedAt,
@@ -40,12 +46,21 @@ class AnimalModel {
   });
 
   factory AnimalModel.fromJson(Map<String, dynamic> json) {
+    DateTime? parseDate(dynamic value) {
+      if (value == null) return null;
+      if (value is String) {
+        final dt = DateTime.tryParse(value);
+        if (dt != null) return dt;
+      }
+      return null;
+    }
+
     return AnimalModel(
-      uid: json['uid'] as String,
-      arete: json['arete'] as String,
-      especie: json['especie'] as String,
-      sexo: json['sexo'] as String,
-      fechaNacimiento: DateTime.parse(json['fecha_nacimiento'] as String),
+      uid: json['uid'] as String? ?? '',
+      arete: json['arete'] as String? ?? '',
+      especie: json['especie'] as String? ?? 'alpaca',
+      sexo: json['sexo'] as String? ?? 'macho',
+      fechaNacimiento: parseDate(json['fecha_nacimiento']) ?? DateTime.now(),
       nombre: json['nombre'] as String? ?? '',
       raza: json['raza'] as String? ?? '',
       padre: json['padre'] as String?,
@@ -54,14 +69,15 @@ class AnimalModel {
       madreUid: json['madre_uid'] as String?,
       foto: json['foto'] as String?,
       observaciones: json['observaciones'] as String? ?? '',
-      activo: json['activo'] as bool? ?? true,
+      estado: json['estado'] as String? ?? 'VIVO',
+      fechaEstado: parseDate(json['fecha_estado']),
+      motivoEstado: json['motivo_estado'] as String? ?? '',
+      pesoNacimientoKg: json['peso_nacimiento_kg'] != null
+          ? double.tryParse(json['peso_nacimiento_kg'].toString())
+          : null,
       syncStatus: json['sync_status'] as String? ?? 'sincronizado',
-      createdAt: json['created_at'] != null
-          ? DateTime.tryParse(json['created_at'] as String)
-          : null,
-      updatedAt: json['updated_at'] != null
-          ? DateTime.tryParse(json['updated_at'] as String)
-          : null,
+      createdAt: parseDate(json['created_at']),
+      updatedAt: parseDate(json['updated_at']),
       categoriaEdad: json['categoria_edad'] as String?,
     );
   }
@@ -77,7 +93,9 @@ class AnimalModel {
       'padre': padreUid,
       'madre': madreUid,
       'observaciones': observaciones,
-      'activo': activo,
+      'estado': estado,
+      'motivo_estado': motivoEstado,
+      'peso_nacimiento_kg': pesoNacimientoKg,
     };
   }
 }
@@ -91,6 +109,7 @@ class AnimalListModel {
   final DateTime fechaNacimiento;
   final String? foto;
   final String? categoriaEdad;
+  final String estado;
 
   AnimalListModel({
     required this.uid,
@@ -101,6 +120,7 @@ class AnimalListModel {
     required this.fechaNacimiento,
     this.foto,
     this.categoriaEdad,
+    this.estado = 'VIVO',
   });
 
   factory AnimalListModel.fromJson(Map<String, dynamic> json) {
@@ -113,6 +133,7 @@ class AnimalListModel {
       fechaNacimiento: DateTime.parse(json['fecha_nacimiento'] as String),
       foto: json['foto'] as String?,
       categoriaEdad: json['categoria_edad'] as String?,
+      estado: json['estado'] as String? ?? 'VIVO',
     );
   }
 }
@@ -148,6 +169,19 @@ class CandidatoModel {
   String get label => nombre.isNotEmpty ? '$arete - $nombre' : arete;
 }
 
+String estadoLabel(String estado) {
+  switch (estado) {
+    case 'VIVO':
+      return 'Vivo';
+    case 'VENDIDO':
+      return 'Vendido';
+    case 'MUERTO':
+      return 'Muerto';
+    default:
+      return estado;
+  }
+}
+
 String categoriaEdadLabel(String? categoria) {
   switch (categoria) {
     case 'cría':
@@ -171,6 +205,7 @@ class ArbolNode {
   final String nombre;
   final String especie;
   final String sexo;
+  final String estado;
   final DateTime? fechaNacimiento;
   final String? foto;
   final ArbolNode? padre;
@@ -182,6 +217,7 @@ class ArbolNode {
     required this.nombre,
     required this.especie,
     required this.sexo,
+    this.estado = 'VIVO',
     this.fechaNacimiento,
     this.foto,
     this.padre,
@@ -195,6 +231,7 @@ class ArbolNode {
       nombre: json['nombre'] as String? ?? '',
       especie: json['especie'] as String,
       sexo: json['sexo'] as String,
+      estado: json['estado'] as String? ?? 'VIVO',
       fechaNacimiento: json['fecha_nacimiento'] != null
           ? DateTime.tryParse(json['fecha_nacimiento'] as String)
           : null,

@@ -21,6 +21,7 @@ class AnimalListState {
   final bool hasMore;
   final String? filtroEspecie;
   final String? filtroSexo;
+  final String? filtroEstado;
   final String search;
 
   const AnimalListState({
@@ -31,6 +32,7 @@ class AnimalListState {
     this.hasMore = true,
     this.filtroEspecie,
     this.filtroSexo,
+    this.filtroEstado,
     this.search = '',
   });
 
@@ -42,6 +44,7 @@ class AnimalListState {
     bool? hasMore,
     String? filtroEspecie,
     String? filtroSexo,
+    String? filtroEstado,
     String? search,
   }) {
     return AnimalListState(
@@ -52,6 +55,7 @@ class AnimalListState {
       hasMore: hasMore ?? this.hasMore,
       filtroEspecie: filtroEspecie ?? this.filtroEspecie,
       filtroSexo: filtroSexo ?? this.filtroSexo,
+      filtroEstado: filtroEstado ?? this.filtroEstado,
       search: search ?? this.search,
     );
   }
@@ -67,6 +71,7 @@ class AnimalListNotifier extends StateNotifier<AnimalListState> {
       state = AnimalListState(
         filtroEspecie: state.filtroEspecie,
         filtroSexo: state.filtroSexo,
+        filtroEstado: state.filtroEstado,
         search: state.search,
       );
     }
@@ -77,6 +82,7 @@ class AnimalListNotifier extends StateNotifier<AnimalListState> {
         page: state.page,
         especie: state.filtroEspecie,
         sexo: state.filtroSexo,
+        estado: state.filtroEstado,
         search: state.search,
       );
       state = state.copyWith(
@@ -91,10 +97,11 @@ class AnimalListNotifier extends StateNotifier<AnimalListState> {
     }
   }
 
-  void setFiltros({String? especie, String? sexo}) {
+  void setFiltros({String? especie, String? sexo, String? estado}) {
     state = AnimalListState(
       filtroEspecie: especie,
       filtroSexo: sexo,
+      filtroEstado: estado,
       search: state.search,
     );
     loadAnimales(refresh: true);
@@ -104,6 +111,7 @@ class AnimalListNotifier extends StateNotifier<AnimalListState> {
     state = AnimalListState(
       filtroEspecie: state.filtroEspecie,
       filtroSexo: state.filtroSexo,
+      filtroEstado: state.filtroEstado,
       search: query,
     );
     loadAnimales(refresh: true);

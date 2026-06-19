@@ -6,7 +6,7 @@ from rest_framework import status
 from django.urls import reverse
 from django.core.exceptions import ValidationError
 from usuarios.models import Usuario
-from .models import Animal, Especie, Sexo, SyncStatus, Produccion
+from .models import Animal, Especie, Sexo, EstadoAnimal, SyncStatus, Produccion
 from .utils import calcular_categoria_edad
 
 
@@ -26,7 +26,7 @@ class AnimalModelTests(APITestCase):
     def test_create_animal_minimal(self):
         animal = self._make_animal()
         self.assertEqual(animal.arete, 'A-001')
-        self.assertTrue(animal.activo)
+        self.assertEqual(animal.estado, EstadoAnimal.VIVO)
         self.assertEqual(animal.sync_status, SyncStatus.SIC)
         self.assertIsNotNone(animal.uid)
 
@@ -177,8 +177,7 @@ class AnimalCRUDTests(APITestCase):
         response = self.client.delete(url)
         self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
         animal = Animal.objects.get(uid=uid)
-        self.assertFalse(animal.activo)
-        self.assertIsNotNone(animal.deleted_at)
+        self.assertEqual(animal.estado, 'VENDIDO')
 
     def test_unauthorized_access(self):
         self.client.force_authenticate(user=None)
@@ -300,8 +299,7 @@ class SyncTests(APITestCase):
         }, format='json')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         animal.refresh_from_db()
-        self.assertFalse(animal.activo)
-        self.assertIsNotNone(animal.deleted_at)
+        self.assertEqual(animal.estado, 'VENDIDO')
 
     def test_sync_returns_server_changes(self):
         response = self.client.post(self.url, {}, format='json')
@@ -461,32 +459,36 @@ class ProduccionModelTests(APITestCase):
         p = Produccion.objects.create(
             animal=self.animal,
             fecha_esquila='2024-06-15',
-            peso_vellon_kg=Decimal('3.50'),
-            rendimiento_pct=Decimal('78.5'),
+            peso_vellon_sucio_kg=Decimal('3.50'),
+            peso_vellon_limpio_kg=Decimal('2.80'),
+            numero_esquila=1,
             observaciones='Buena calidad'
         )
         self.assertIsNotNone(p.uid)
-        self.assertEqual(p.peso_vellon_kg, Decimal('3.50'))
-        self.assertEqual(p.rendimiento_pct, Decimal('78.5'))
+        self.assertEqual(p.peso_vellon_sucio_kg, Decimal('3.50'))
+        self.assertEqual(p.peso_vellon_limpio_kg, Decimal('2.80'))
+        self.assertEqual(p.numero_esquila, 1)
+        self.assertAlmostEqual(float(p.rendimiento_pct), 80.0, places=1)
         self.assertEqual(p.animal, self.animal)
 
     def test_produccion_defaults(self):
         p = Produccion.objects.create(
             animal=self.animal, fecha_esquila='2024-06-15',
-            peso_vellon_kg=Decimal('2.00')
+            peso_vellon_sucio_kg=Decimal('2.00')
         )
-        self.assertIsNone(p.rendimiento_pct)
+        self.assertIsNone(p.peso_vellon_limpio_kg)
+        self.assertIsNone(p.numero_esquila)
         self.assertEqual(p.observaciones, '')
         self.assertEqual(p.sync_status, SyncStatus.SIC)
 
     def test_animal_producciones_relation(self):
         Produccion.objects.create(
             animal=self.animal, fecha_esquila='2024-01-10',
-            peso_vellon_kg=Decimal('3.00')
+            peso_vellon_sucio_kg=Decimal('3.00')
         )
         Produccion.objects.create(
             animal=self.animal, fecha_esquila='2024-06-20',
-            peso_vellon_kg=Decimal('3.50')
+            peso_vellon_sucio_kg=Decimal('3.50')
         )
         self.assertEqual(self.animal.producciones.count(), 2)
 
@@ -507,8 +509,9 @@ class ProduccionAPITests(APITestCase):
     def _create_produccion(self, **kwargs):
         data = dict(
             fecha_esquila='2024-06-15',
-            peso_vellon_kg='3.50',
-            rendimiento_pct='78.5',
+            peso_vellon_sucio_kg='3.50',
+            peso_vellon_limpio_kg='2.80',
+            numero_esquila=1,
             observaciones='Test'
         )
         data.update(kwargs)
@@ -517,7 +520,7 @@ class ProduccionAPITests(APITestCase):
     def test_nested_list_producciones(self):
         Produccion.objects.create(
             uid=uuid.uuid4(), animal=self.animal,
-            fecha_esquila='2024-06-15', peso_vellon_kg=Decimal('3.50')
+            fecha_esquila='2024-06-15', peso_vellon_sucio_kg=Decimal('3.50')
         )
         response = self.client.get(self.nested_url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -530,12 +533,13 @@ class ProduccionAPITests(APITestCase):
         self.assertIn('animal_uid', response.data)
         self.assertEqual(response.data['animal_uid'], str(self.animal.uid))
         self.assertEqual(Produccion.objects.count(), 1)
+        self.assertIn('rendimiento_pct', response.data)
 
-    def test_nested_create_rendimiento_null(self):
-        data = self._create_produccion(rendimiento_pct=None)
+    def test_nested_create_rendimiento_calculated(self):
+        data = self._create_produccion()
         response = self.client.post(self.nested_url, data, format='json')
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        self.assertIsNone(response.data['rendimiento_pct'])
+        self.assertIsNotNone(response.data['rendimiento_pct'])
 
     def test_nested_create_future_date_fails(self):
         future = date.today() + timedelta(days=1)
@@ -544,14 +548,14 @@ class ProduccionAPITests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_nested_create_zero_weight_fails(self):
-        data = self._create_produccion(peso_vellon_kg='0')
+        data = self._create_produccion(peso_vellon_sucio_kg='0')
         response = self.client.post(self.nested_url, data, format='json')
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_standalone_get_produccion(self):
         p = Produccion.objects.create(
             animal=self.animal, fecha_esquila='2024-06-15',
-            peso_vellon_kg=Decimal('3.50')
+            peso_vellon_sucio_kg=Decimal('3.50')
         )
         url = reverse('produccion-detail', kwargs={'pk': p.uid})
         response = self.client.get(url)
@@ -561,18 +565,18 @@ class ProduccionAPITests(APITestCase):
     def test_standalone_update_produccion(self):
         p = Produccion.objects.create(
             animal=self.animal, fecha_esquila='2024-06-15',
-            peso_vellon_kg=Decimal('3.50')
+            peso_vellon_sucio_kg=Decimal('3.50')
         )
         url = reverse('produccion-detail', kwargs={'pk': p.uid})
-        response = self.client.patch(url, {'peso_vellon_kg': '4.00'}, format='json')
+        response = self.client.patch(url, {'peso_vellon_sucio_kg': '4.00'}, format='json')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         p.refresh_from_db()
-        self.assertEqual(p.peso_vellon_kg, Decimal('4.00'))
+        self.assertEqual(p.peso_vellon_sucio_kg, Decimal('4.00'))
 
     def test_standalone_delete_produccion(self):
         p = Produccion.objects.create(
             animal=self.animal, fecha_esquila='2024-06-15',
-            peso_vellon_kg=Decimal('3.50')
+            peso_vellon_sucio_kg=Decimal('3.50')
         )
         url = reverse('produccion-detail', kwargs={'pk': p.uid})
         response = self.client.delete(url)
@@ -594,7 +598,7 @@ class ProduccionAPITests(APITestCase):
         )
         p = Produccion.objects.create(
             animal=other_animal, fecha_esquila='2024-06-15',
-            peso_vellon_kg=Decimal('3.50')
+            peso_vellon_sucio_kg=Decimal('3.50')
         )
         url = reverse('produccion-detail', kwargs={'pk': p.uid})
         response = self.client.get(url)
@@ -620,7 +624,7 @@ class ProduccionSyncTests(APITestCase):
                 'uid': str(prod_uid),
                 'animal_uid': str(self.animal.uid),
                 'fecha_esquila': '2024-06-15',
-                'peso_vellon_kg': '3.50',
+                'peso_vellon_sucio_kg': '3.50',
                 'action': 'create',
             }]
         }, format='json')
@@ -630,32 +634,32 @@ class ProduccionSyncTests(APITestCase):
     def test_sync_with_produccion_update(self):
         p = Produccion.objects.create(
             uid=uuid.uuid4(), animal=self.animal,
-            fecha_esquila='2024-06-15', peso_vellon_kg=Decimal('3.00')
+            fecha_esquila='2024-06-15', peso_vellon_sucio_kg=Decimal('3.00')
         )
         response = self.client.post(reverse('sync'), {
             'produccion_changes': [{
                 'uid': str(p.uid),
                 'animal_uid': str(self.animal.uid),
                 'fecha_esquila': '2024-06-15',
-                'peso_vellon_kg': '4.00',
+                'peso_vellon_sucio_kg': '4.00',
                 'action': 'update',
             }]
         }, format='json')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         p.refresh_from_db()
-        self.assertEqual(p.peso_vellon_kg, Decimal('4.00'))
+        self.assertEqual(p.peso_vellon_sucio_kg, Decimal('4.00'))
 
     def test_sync_with_produccion_delete(self):
         p = Produccion.objects.create(
             uid=uuid.uuid4(), animal=self.animal,
-            fecha_esquila='2024-06-15', peso_vellon_kg=Decimal('3.00')
+            fecha_esquila='2024-06-15', peso_vellon_sucio_kg=Decimal('3.00')
         )
         response = self.client.post(reverse('sync'), {
             'produccion_changes': [{
                 'uid': str(p.uid),
                 'animal_uid': str(self.animal.uid),
                 'fecha_esquila': '2024-06-15',
-                'peso_vellon_kg': '3.00',
+                'peso_vellon_sucio_kg': '3.00',
                 'action': 'delete',
             }]
         }, format='json')

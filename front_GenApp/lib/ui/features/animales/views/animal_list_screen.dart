@@ -100,10 +100,12 @@ class _AnimalListScreenState extends ConsumerState<AnimalListScreen> {
           _FiltrosChips(
             especie: state.filtroEspecie,
             sexo: state.filtroSexo,
-            onChanged: (especie, sexo) {
+            estado: state.filtroEstado,
+            onChanged: (especie, sexo, estado) {
               ref.read(animalListProvider.notifier).setFiltros(
                     especie: especie,
                     sexo: sexo,
+                    estado: estado,
                   );
             },
           ),
@@ -177,11 +179,13 @@ class _AnimalListScreenState extends ConsumerState<AnimalListScreen> {
 class _FiltrosChips extends StatelessWidget {
   final String? especie;
   final String? sexo;
-  final void Function(String? especie, String? sexo) onChanged;
+  final String? estado;
+  final void Function(String? especie, String? sexo, String? estado) onChanged;
 
   const _FiltrosChips({
     required this.especie,
     required this.sexo,
+    required this.estado,
     required this.onChanged,
   });
 
@@ -216,11 +220,18 @@ class _FiltrosChips extends StatelessWidget {
                       : Icons.wc,
               onTap: () => _showSexoSheet(context),
             ),
-            if (especie != null || sexo != null) ...[
+            const SizedBox(width: 8),
+            _ChipFilter(
+              label: estado != null ? _estadoLabel(estado!) : 'Estado',
+              selected: estado != null,
+              icon: Icons.circle,
+              onTap: () => _showEstadoSheet(context),
+            ),
+            if (especie != null || sexo != null || estado != null) ...[
               const SizedBox(width: 8),
               IconButton(
                 icon: const Icon(Icons.close, size: 18),
-                onPressed: () => onChanged(null, null),
+                onPressed: () => onChanged(null, null, null),
                 tooltip: 'Limpiar filtros',
                 style: IconButton.styleFrom(
                   backgroundColor: Colors.grey.shade100,
@@ -248,7 +259,7 @@ class _FiltrosChips extends StatelessWidget {
         ],
         values: const [null, 'alpaca', 'llama', 'ovino'],
         selected: especie,
-        onSelected: (v) => onChanged(v as String?, sexo),
+        onSelected: (v) => onChanged(v as String?, sexo, estado),
       ),
     );
   }
@@ -261,7 +272,20 @@ class _FiltrosChips extends StatelessWidget {
         options: const ['Todos', 'Macho', 'Hembra'],
         values: const [null, 'macho', 'hembra'],
         selected: sexo,
-        onSelected: (v) => onChanged(especie, v as String?),
+        onSelected: (v) => onChanged(especie, v as String?, estado),
+      ),
+    );
+  }
+
+  void _showEstadoSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      builder: (_) => _OptionSheet(
+        title: 'Filtrar por estado',
+        options: const ['Todos', 'Vivo', 'Vendido', 'Muerto'],
+        values: const [null, 'VIVO', 'VENDIDO', 'MUERTO'],
+        selected: estado,
+        onSelected: (v) => onChanged(especie, sexo, v as String?),
       ),
     );
   }
@@ -280,6 +304,19 @@ class _FiltrosChips extends StatelessWidget {
   }
 
   String _sexoLabel(String s) => s == 'macho' ? 'Macho' : 'Hembra';
+
+  String _estadoLabel(String e) {
+    switch (e) {
+      case 'VIVO':
+        return 'Vivo';
+      case 'VENDIDO':
+        return 'Vendido';
+      case 'MUERTO':
+        return 'Muerto';
+      default:
+        return e;
+    }
+  }
 }
 
 class _ChipFilter extends StatelessWidget {

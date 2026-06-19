@@ -23,11 +23,14 @@ class _AnimalFormScreenState extends ConsumerState<AnimalFormScreen> {
   final _areteCtrl = TextEditingController();
   final _nombreCtrl = TextEditingController();
   final _razaCtrl = TextEditingController();
+  final _motivoCtrl = TextEditingController();
   final _obsCtrl = TextEditingController();
 
   String _especie = 'alpaca';
   String _sexo = 'macho';
+  String _estado = 'VIVO';
   DateTime _fechaNac = DateTime.now();
+  final _pesoNacCtrl = TextEditingController();
   bool _saving = false;
 
   CandidatoModel? _padre;
@@ -76,7 +79,12 @@ class _AnimalFormScreenState extends ConsumerState<AnimalFormScreen> {
       _obsCtrl.text = animal.observaciones;
       _especie = animal.especie;
       _sexo = animal.sexo;
+      _estado = animal.estado;
+      _motivoCtrl.text = animal.motivoEstado;
       _fechaNac = animal.fechaNacimiento;
+      if (animal.pesoNacimientoKg != null) {
+        _pesoNacCtrl.text = animal.pesoNacimientoKg.toString();
+      }
       if (animal.padreUid != null) {
         _padre =
             _candidatos.where((c) => c.uid == animal.padreUid).firstOrNull;
@@ -100,7 +108,9 @@ class _AnimalFormScreenState extends ConsumerState<AnimalFormScreen> {
     _areteCtrl.dispose();
     _nombreCtrl.dispose();
     _razaCtrl.dispose();
+    _motivoCtrl.dispose();
     _obsCtrl.dispose();
+    _pesoNacCtrl.dispose();
     super.dispose();
   }
 
@@ -135,12 +145,17 @@ class _AnimalFormScreenState extends ConsumerState<AnimalFormScreen> {
         arete: _areteCtrl.text.trim(),
         especie: _especie,
         sexo: _sexo,
+        estado: _estado,
+        motivoEstado: _motivoCtrl.text.trim(),
         fechaNacimiento: _fechaNac,
         nombre: _nombreCtrl.text.trim(),
         raza: _razaCtrl.text.trim(),
         padreUid: _padre?.uid,
         madreUid: _madre?.uid,
         observaciones: _obsCtrl.text.trim(),
+        pesoNacimientoKg: _pesoNacCtrl.text.isNotEmpty
+            ? double.tryParse(_pesoNacCtrl.text)
+            : null,
       );
       final repo = ref.read(animalRepositoryProvider);
       String uid;
@@ -200,8 +215,11 @@ class _AnimalFormScreenState extends ConsumerState<AnimalFormScreen> {
                   prefixIcon: const Icon(Icons.tag),
                   errorText: _fieldErrors['arete'],
                 ),
-                validator: (v) =>
-                    v != null && v.trim().isNotEmpty ? null : 'Requerido',
+                validator: (v) {
+                  if (v == null || v.trim().isEmpty) return 'Requerido';
+                  if (v.length > 50) return 'Máximo 50 caracteres';
+                  return null;
+                },
               ),
               const SizedBox(height: 16),
               TextFormField(
@@ -210,6 +228,10 @@ class _AnimalFormScreenState extends ConsumerState<AnimalFormScreen> {
                   labelText: 'Nombre',
                   prefixIcon: Icon(Icons.pets),
                 ),
+                validator: (v) {
+                  if (v != null && v.length > 100) return 'Máximo 100 caracteres';
+                  return null;
+                },
               ),
               const SizedBox(height: 16),
               DropdownButtonFormField<String>(
@@ -237,6 +259,54 @@ class _AnimalFormScreenState extends ConsumerState<AnimalFormScreen> {
                 },
               ),
               const SizedBox(height: 16),
+              DropdownButtonFormField<String>(
+                value: _estado,
+                decoration: const InputDecoration(labelText: 'Estado *'),
+                items: const [
+                  DropdownMenuItem(value: 'VIVO', child: Text('Vivo')),
+                  DropdownMenuItem(value: 'VENDIDO', child: Text('Vendido')),
+                  DropdownMenuItem(value: 'MUERTO', child: Text('Muerto')),
+                ],
+                onChanged: (v) {
+                  if (v != null) setState(() => _estado = v);
+                },
+              ),
+              if (_estado != 'VIVO') ...[
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: _motivoCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Motivo del cambio de estado *',
+                    prefixIcon: Icon(Icons.info_outline),
+                    alignLabelWithHint: true,
+                  ),
+                  maxLines: 2,
+                  validator: (v) {
+                    if (v == null || v.trim().isEmpty) return 'Requerido cuando el estado no es Vivo';
+                    return null;
+                  },
+                ),
+              ],
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _pesoNacCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Peso al Nacimiento (kg)',
+                  prefixIcon: Icon(Icons.monitor_weight),
+                ),
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+                validator: (v) {
+                  if (v != null && v.isNotEmpty) {
+                    final n = double.tryParse(v);
+                    if (n == null) return 'Debe ser un número válido';
+                    if (n <= 0) return 'Debe ser mayor a 0';
+                    if (n > 999.99) return 'No puede superar 999.99 kg';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 16),
               InkWell(
                 onTap: _selectDate,
                 child: InputDecorator(
@@ -257,6 +327,10 @@ class _AnimalFormScreenState extends ConsumerState<AnimalFormScreen> {
                   labelText: 'Raza',
                   prefixIcon: Icon(Icons.category),
                 ),
+                validator: (v) {
+                  if (v != null && v.length > 50) return 'Máximo 50 caracteres';
+                  return null;
+                },
               ),
               const SizedBox(height: 16),
               _ParentSelector(

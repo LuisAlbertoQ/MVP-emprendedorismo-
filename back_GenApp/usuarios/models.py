@@ -34,7 +34,7 @@ class Usuario(AbstractUser):
 
     @property
     def animales_count(self):
-        return self.animales.filter(activo=True).count()
+        return self.animales.filter(estado='VIVO').count()
 
     @property
     def generations_allowed(self):

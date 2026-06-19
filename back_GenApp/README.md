@@ -94,7 +94,7 @@ Servidor disponible en: `http://localhost:8000`
 
 | Método | Endpoint | Descripción | Planes |
 |--------|----------|-------------|--------|
-| GET | `/` | Listar (paginado, ?especie=&sexo=&activo=&search=) — incluye `categoria_edad` y `foto` | Todos |
+| GET | `/` | Listar (paginado, ?especie=&sexo=&estado=&search=) — incluye `categoria_edad`, `foto` y `estado` | Todos |
 | POST | `/` | Crear animal | Todos (limite) |
 | GET | `/{uid}/` | Detalle — incluye `categoria_edad` y `foto` (URL absoluta) | Todos |
 | PUT | `/{uid}/` | Actualizar (completo) | Todos |
@@ -145,25 +145,32 @@ Servidor disponible en: `http://localhost:8000`
 | Perfil de usuario | ✅ Completo |
 | Planes (Gratuito/Básico/Criador) | ✅ Completo |
 | CRUD de animales | ✅ Completo |
-| Validación padre/madre (especie, sexo, edad en meses) | ✅ Completo |
+| Estado (VIVO/VENDIDO/MUERTO + motivo + fecha) | ✅ Completo |
+| Peso al nacer (peso_nacimiento_kg) | ✅ Completo |
+| Validación padre/madre (especie, sexo, fecha nacimiento) | ✅ Completo |
 | Categoría de edad automática (cría/tui_menor/tui_mayor/borrego/adulto) | ✅ Completo |
-| Límite de animales por plan | ✅ Completo |
-| Árbol genealógico (2-3 gen) | ✅ Completo |
-| **CRUD de producciones (esquilas)** | ✅ **Nuevo** |
-| **Sincronización offline de producciones** | ✅ **Nuevo** |
-| **Reporte de esquilas CSV/PDF** | ✅ **Nuevo** |
-| **Total esquilas en reportes CSV/PDF** | ✅ **Nuevo** |
-| **Foto con URL absoluta (visible en app)** | ✅ **Mejorado** |
-| **PDF con diseño profesional** | ✅ **Mejorado** |
+| Límite de animales por plan (también en reactivación) | ✅ Completo |
+| Árbol genealógico (2-3 gen, con estado) | ✅ Completo |
+| CRUD de producciones (sucio/limpio/número esquila) | ✅ Completo |
+| Rendimiento calculado en vivo (no almacenado) | ✅ Completo |
+| Unique constraint (animal, numero_esquila) | ✅ Completo |
+| Validaciones: peso limpio ≤ sucio, fecha ≥ nacimiento | ✅ Completo |
+| Validaciones: peso nacimiento > 0, numero_esquila > 0 | ✅ Completo |
+| Validaciones Sync: límite animales, sexo padres | ✅ Completo |
+| Sincronización offline de producciones | ✅ Completo |
+| Reporte de esquilas CSV/PDF | ✅ Completo |
+| Total esquilas en reportes CSV/PDF | ✅ Completo |
+| Foto con URL absoluta (visible en app) | ✅ Completo |
+| PDF con diseño profesional | ✅ Completo |
 | Reportes CSV/PDF | ✅ Completo |
 | Sincronización offline | ✅ Completo |
 | Búsqueda por arete/nombre | ✅ Completo |
-| Filtros (especie, sexo, activo, search) | ✅ Completo |
+| Filtros (especie, sexo, estado, search) | ✅ Completo |
 | Candidatos con categoría de edad y filtro especie | ✅ Completo |
-| Soft delete | ✅ Completo |
+| Soft delete (vía estado=VENDIDO) | ✅ Completo |
 | Webhook Yape | ⚠️ Stub básico |
 | Notificaciones push | ❌ Futura versión |
-| Exportación PDF/Excel | ✅ CSV y PDF |
+| Exportación PDF/CSV | ✅ CSV y PDF |
 
 ## Modelos de Datos
 
@@ -176,27 +183,33 @@ Servidor disponible en: `http://localhost:8000`
 
 ### Animal
 - `uid` - UUID único (identificador para API)
-- `arete` - Código único por usuario
+- `arete` - Código único por usuario (max 50 chars)
 - `especie` - alpaca / llama / ovino
 - `sexo` - hembra / macho
 - `fecha_nacimiento` - Fecha de nacimiento (usada para calcular categoría de edad)
-- `nombre` - Opcional
-- `raza` - Opcional
+- `nombre` - Opcional (max 100 chars)
+- `raza` - Opcional (max 50 chars)
 - `padre` / `madre` - Relaciones autopreferenciales
 - `foto` - Imagen del animal (ImageField)
-- `activo` - Borrado lógico
+- `estado` - VIVO / VENDIDO / MUERTO (reemplaza `activo`)
+- `fecha_estado` - Fecha del último cambio de estado (autoasignada)
+- `motivo_estado` - Motivo opcional del cambio (requerido si estado ≠ VIVO)
+- `peso_nacimiento_kg` - Peso al nacer (Decimal, nullable, > 0)
 - `sync_status` - sincronizado / pendiente / error
-- `created_at` / `updated_at` / `deleted_at`
+- `created_at` / `updated_at`
 
 ### Produccion (historial de esquilas)
 - `uid` - UUID único para sincronización offline
 - `animal` - FK a Animal (relación 1 a N)
-- `fecha_esquila` - Fecha de la esquila (DateField)
-- `peso_vellon_kg` - Peso del vellón en kg (Decimal)
-- `rendimiento_pct` - Rendimiento en porcentaje (Decimal, nullable)
+- `fecha_esquila` - Fecha de la esquila (DateField, no futura, ≥ fecha_nacimiento del animal)
+- `peso_vellon_sucio_kg` - Peso del vellón sucio en kg (Decimal, > 0) — renombrado de `peso_vellon_kg`
+- `peso_vellon_limpio_kg` - Peso del vellón limpio en kg (Decimal, nullable, ≤ peso sucio)
+- `numero_esquila` - Número de esquila (Integer, nullable, > 0, único por animal)
+- `rendimiento_pct` - **Calculado en vivo**: `(vellón_limpio / vellón_sucio) × 100` — no se almacena en BD
 - `observaciones` - Texto libre (TextField)
 - `sync_status` - sincronizado / pendiente / error
 - `created_at` / `updated_at`
+- Unique constraint: `(animal, numero_esquila)` — no permite esquilas duplicadas
 - Índice compuesto en `(animal, fecha_esquila)` para consultas rápidas
 - **No tiene soft delete** — se elimina físicamente
 
@@ -317,7 +330,7 @@ GET http://localhost:8000/api/v1/reporte/animales/?format=csv
 .\env\Scripts\python.exe manage.py test
 ```
 
-77 tests — modelos, serializers, views, límites por plan, árbol genealógico, validación padre/madre, categoría de edad, **producción (16 tests: modelo, endpoints, sync, validaciones)**.
+61 tests — modelos, serializers, views, límites por plan, árbol genealógico, validación padre/madre, categoría de edad, producción (CRUD anidado, standalone, sync), estados.
 
 ## Estructura del Proyecto
 
@@ -339,7 +352,11 @@ back_GenApp/
 │   ├── urls.py           # Rutas de animales + producciones
 │   ├── tests.py          # 77 tests
 │   └── migrations/
-│       └── 0003_produccion.py
+│       ├── 0003_produccion.py
+│       ├── 0004_v2_refactor.py   # activo→estado, peso_nacimiento, peso_vellon_sucio/limpio, numero_esquila, rendimiento removido
+│       ├── 0005_alter_produccion_options...
+│       ├── 0006_alter_produccion_numero_esquila
+│       └── 0007_validaciones_produccion_unique  # UniqueConstraint(animal, numero_esquila)
 ├── env/                  # Entorno virtual Python 3.12
 ├── media/                # Archivos subidos (fotos)
 │   └── animales/         # Fotos de animales
