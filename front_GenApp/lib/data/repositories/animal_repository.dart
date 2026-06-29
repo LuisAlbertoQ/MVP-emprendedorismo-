@@ -50,8 +50,13 @@ class AnimalRepository {
     return ArbolNode.fromJson(data);
   }
 
-  Future<List<CandidatoModel>> getCandidatos() async {
-    final data = await _api.getList('/animales/candidatos/');
+  Future<List<CandidatoModel>> getCandidatos(
+      {List<String> includeUids = const []}) async {
+    var path = '/animales/candidatos/';
+    if (includeUids.isNotEmpty) {
+      path += '?include_uids=${includeUids.join(',')}';
+    }
+    final data = await _api.getList(path);
     return data
         .map((e) => CandidatoModel.fromJson(e as Map<String, dynamic>))
         .toList();

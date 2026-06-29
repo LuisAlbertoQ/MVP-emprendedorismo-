@@ -152,4 +152,28 @@ class ApiService {
   Future<Response> download(String path, String savePath) async {
     return _dio.download(path, savePath);
   }
+
+  static String extractError(Object e) {
+    if (e is DioException) {
+      final data = e.response?.data;
+      if (data is Map) {
+        final messages = <String>[];
+        for (final entry in data.entries) {
+          final value = entry.value;
+          if (value is List) {
+            for (final msg in value) {
+              final s = msg.toString().trim();
+              if (s.isNotEmpty) messages.add(s);
+            }
+          } else if (value is String && value.trim().isNotEmpty) {
+            messages.add(value.trim());
+          }
+        }
+        return messages.join('\n');
+      }
+      if (data is String) return data;
+      return e.message ?? 'Error de conexión';
+    }
+    return e.toString();
+  }
 }

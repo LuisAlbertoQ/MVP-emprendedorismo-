@@ -4,10 +4,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:dio/dio.dart';
-import 'package:front_genapp/data/models/animal_model.dart' show AnimalModel, CandidatoModel, categoriaEdadLabel;
+import 'package:front_genapp/data/services/api_service.dart';
+import 'package:front_genapp/data/models/animal_model.dart' show AnimalModel, CandidatoModel;
 import 'package:front_genapp/ui/core/constants.dart';
 import 'package:front_genapp/ui/core/theme.dart';
 import 'package:front_genapp/ui/core/widgets/loading_button.dart';
+import 'package:front_genapp/ui/core/widgets/animal_selector.dart';
 import 'package:front_genapp/ui/features/animales/providers/animal_provider.dart';
 
 class AnimalFormScreen extends ConsumerStatefulWidget {
@@ -18,15 +20,34 @@ class AnimalFormScreen extends ConsumerStatefulWidget {
   ConsumerState<AnimalFormScreen> createState() => _AnimalFormScreenState();
 }
 
+const _razasPorEspecie = <String, List<String>>{
+  'alpaca': ['huacaya', 'suri'],
+  'llama': ['kara', 'chaqu'],
+  'ovino': ['criollo', 'corriedale', 'junin', 'hampshire_down', 'black_belly', 'assaf'],
+};
+
+const _razaLabel = <String, String>{
+  'huacaya': 'Huacaya',
+  'suri': 'Suri',
+  'kara': "K'ara",
+  'chaqu': 'Chaqu',
+  'criollo': 'Criollo',
+  'corriedale': 'Corriedale',
+  'junin': 'Junín',
+  'hampshire_down': 'Hampshire Down',
+  'black_belly': 'Black Belly',
+  'assaf': 'Assaf',
+};
+
 class _AnimalFormScreenState extends ConsumerState<AnimalFormScreen> {
   final _formKey = GlobalKey<FormState>();
   final _areteCtrl = TextEditingController();
   final _nombreCtrl = TextEditingController();
-  final _razaCtrl = TextEditingController();
   final _motivoCtrl = TextEditingController();
   final _obsCtrl = TextEditingController();
 
   String _especie = 'alpaca';
+  String _raza = '';
   String _sexo = 'macho';
   String _estado = 'VIVO';
   DateTime _fechaNac = DateTime.now();
@@ -54,11 +75,11 @@ class _AnimalFormScreenState extends ConsumerState<AnimalFormScreen> {
     }
   }
 
-  Future<void> _loadCandidatos() async {
+  Future<void> _loadCandidatos({List<String> includeUids = const []}) async {
     setState(() => _loadingCandidatos = true);
     try {
       final repo = ref.read(animalRepositoryProvider);
-      _candidatos = await repo.getCandidatos();
+      _candidatos = await repo.getCandidatos(includeUids: includeUids);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -75,7 +96,7 @@ class _AnimalFormScreenState extends ConsumerState<AnimalFormScreen> {
           await ref.read(animalRepositoryProvider).getAnimal(widget.uid!);
       _areteCtrl.text = animal.arete;
       _nombreCtrl.text = animal.nombre;
-      _razaCtrl.text = animal.raza;
+      _raza = animal.raza;
       _obsCtrl.text = animal.observaciones;
       _especie = animal.especie;
       _sexo = animal.sexo;
@@ -85,6 +106,12 @@ class _AnimalFormScreenState extends ConsumerState<AnimalFormScreen> {
       if (animal.pesoNacimientoKg != null) {
         _pesoNacCtrl.text = animal.pesoNacimientoKg.toString();
       }
+      await _loadCandidatos(
+        includeUids: [
+          if (animal.padreUid != null) animal.padreUid!,
+          if (animal.madreUid != null) animal.madreUid!,
+        ],
+      );
       if (animal.padreUid != null) {
         _padre =
             _candidatos.where((c) => c.uid == animal.padreUid).firstOrNull;
@@ -107,7 +134,6 @@ class _AnimalFormScreenState extends ConsumerState<AnimalFormScreen> {
   void dispose() {
     _areteCtrl.dispose();
     _nombreCtrl.dispose();
-    _razaCtrl.dispose();
     _motivoCtrl.dispose();
     _obsCtrl.dispose();
     _pesoNacCtrl.dispose();
@@ -149,7 +175,7 @@ class _AnimalFormScreenState extends ConsumerState<AnimalFormScreen> {
         motivoEstado: _motivoCtrl.text.trim(),
         fechaNacimiento: _fechaNac,
         nombre: _nombreCtrl.text.trim(),
-        raza: _razaCtrl.text.trim(),
+        raza: _raza,
         padreUid: _padre?.uid,
         madreUid: _madre?.uid,
         observaciones: _obsCtrl.text.trim(),
@@ -188,12 +214,32 @@ class _AnimalFormScreenState extends ConsumerState<AnimalFormScreen> {
       }
       if (mounted && _fieldErrors.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
+          SnackBar(content: Text(ApiService.extractError(e))),
         );
       }
     } finally {
       if (mounted) setState(() => _saving = false);
     }
+  }
+
+  Widget _buildSection(String title, List<Widget> children) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(title,
+                style: Theme.of(context)
+                    .textTheme
+                    .titleMedium
+                    ?.copyWith(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 12),
+            ...children,
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -208,165 +254,212 @@ class _AnimalFormScreenState extends ConsumerState<AnimalFormScreen> {
           key: _formKey,
           child: Column(
             children: [
-              TextFormField(
-                controller: _areteCtrl,
-                decoration: InputDecoration(
-                  labelText: 'Arete *',
-                  prefixIcon: const Icon(Icons.tag),
-                  errorText: _fieldErrors['arete'],
-                ),
-                validator: (v) {
-                  if (v == null || v.trim().isEmpty) return 'Requerido';
-                  if (v.length > 50) return 'Máximo 50 caracteres';
-                  return null;
-                },
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _nombreCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Nombre',
-                  prefixIcon: Icon(Icons.pets),
-                ),
-                validator: (v) {
-                  if (v != null && v.length > 100) return 'Máximo 100 caracteres';
-                  return null;
-                },
-              ),
-              const SizedBox(height: 16),
-              DropdownButtonFormField<String>(
-                value: _especie,
-                decoration: const InputDecoration(labelText: 'Especie *'),
-                items: const [
-                  DropdownMenuItem(value: 'alpaca', child: Text('Alpaca')),
-                  DropdownMenuItem(value: 'llama', child: Text('Llama')),
-                  DropdownMenuItem(value: 'ovino', child: Text('Ovino')),
-                ],
-                onChanged: (v) {
-                  if (v != null) setState(() => _especie = v);
-                },
-              ),
-              const SizedBox(height: 16),
-              DropdownButtonFormField<String>(
-                value: _sexo,
-                decoration: const InputDecoration(labelText: 'Sexo *'),
-                items: const [
-                  DropdownMenuItem(value: 'macho', child: Text('Macho')),
-                  DropdownMenuItem(value: 'hembra', child: Text('Hembra')),
-                ],
-                onChanged: (v) {
-                  if (v != null) setState(() => _sexo = v);
-                },
-              ),
-              const SizedBox(height: 16),
-              DropdownButtonFormField<String>(
-                value: _estado,
-                decoration: const InputDecoration(labelText: 'Estado *'),
-                items: const [
-                  DropdownMenuItem(value: 'VIVO', child: Text('Vivo')),
-                  DropdownMenuItem(value: 'VENDIDO', child: Text('Vendido')),
-                  DropdownMenuItem(value: 'MUERTO', child: Text('Muerto')),
-                ],
-                onChanged: (v) {
-                  if (v != null) setState(() => _estado = v);
-                },
-              ),
-              if (_estado != 'VIVO') ...[
-                const SizedBox(height: 16),
+              _buildSection('Identificación', [
                 TextFormField(
-                  controller: _motivoCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'Motivo del cambio de estado *',
-                    prefixIcon: Icon(Icons.info_outline),
-                    alignLabelWithHint: true,
+                  controller: _areteCtrl,
+                  decoration: InputDecoration(
+                    labelText: 'Arete *',
+                    prefixIcon: const Icon(Icons.tag),
+                    errorText: _fieldErrors['arete'],
                   ),
-                  maxLines: 2,
                   validator: (v) {
-                    if (v == null || v.trim().isEmpty) return 'Requerido cuando el estado no es Vivo';
+                    if (v == null || v.trim().isEmpty) return 'Requerido';
+                    if (v.length > 50) return 'Máximo 50 caracteres';
                     return null;
                   },
                 ),
-              ],
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _pesoNacCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Peso al Nacimiento (kg)',
-                  prefixIcon: Icon(Icons.monitor_weight),
-                ),
-                keyboardType:
-                    const TextInputType.numberWithOptions(decimal: true),
-                validator: (v) {
-                  if (v != null && v.isNotEmpty) {
-                    final n = double.tryParse(v);
-                    if (n == null) return 'Debe ser un número válido';
-                    if (n <= 0) return 'Debe ser mayor a 0';
-                    if (n > 999.99) return 'No puede superar 999.99 kg';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 16),
-              InkWell(
-                onTap: _selectDate,
-                child: InputDecorator(
-                  decoration: InputDecoration(
-                    labelText: 'Fecha de Nacimiento *',
-                    prefixIcon: const Icon(Icons.calendar_today),
-                    errorText: _fieldErrors['fecha_nacimiento'],
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: _nombreCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Nombre',
+                    prefixIcon: Icon(Icons.pets),
                   ),
-                  child: Text(
-                    '${_fechaNac.day}/${_fechaNac.month}/${_fechaNac.year}',
+                  validator: (v) {
+                    if (v != null && v.length > 100) return 'Máximo 100 caracteres';
+                    return null;
+                  },
+                ),
+              ]),
+              const SizedBox(height: 16),
+              _buildSection('Clasificación', [
+                Row(
+                  children: [
+                    Expanded(
+                      child: DropdownButtonFormField<String>(
+                        isExpanded: true,
+                        value: _especie,
+                        decoration: const InputDecoration(
+                          labelText: 'Especie *',
+                          prefixIcon: Icon(Icons.pets),
+                        ),
+                        items: const [
+                          DropdownMenuItem(value: 'alpaca', child: Text('Alpaca')),
+                          DropdownMenuItem(value: 'llama', child: Text('Llama')),
+                          DropdownMenuItem(value: 'ovino', child: Text('Ovino')),
+                        ],
+                        onChanged: (v) {
+                          if (v != null && v != _especie) {
+                            final razas = _razasPorEspecie[v]!;
+                            if (!razas.contains(_raza)) _raza = '';
+                            setState(() => _especie = v);
+                          }
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: DropdownButtonFormField<String>(
+                        isExpanded: true,
+                        value: _raza.isNotEmpty ? _raza : null,
+                        decoration: const InputDecoration(
+                          labelText: 'Raza',
+                          prefixIcon: Icon(Icons.category),
+                        ),
+                        items: _razasPorEspecie[_especie]!
+                            .map((r) => DropdownMenuItem(
+                                  value: r,
+                                  child: Text(
+                                    _razaLabel[r] ?? r,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ))
+                            .toList(),
+                        onChanged: (v) => setState(() => _raza = v ?? ''),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _SexoCard(
+                        icon: Icons.male,
+                        label: 'Macho',
+                        selected: _sexo == 'macho',
+                        onTap: () => setState(() => _sexo = 'macho'),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _SexoCard(
+                        icon: Icons.female,
+                        label: 'Hembra',
+                        selected: _sexo == 'hembra',
+                        onTap: () => setState(() => _sexo = 'hembra'),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                DropdownButtonFormField<String>(
+                  isExpanded: true,
+                  value: _estado,
+                  decoration: const InputDecoration(
+                    labelText: 'Estado *',
+                    prefixIcon: Icon(Icons.info_outline),
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 'VIVO', child: Text('Vivo')),
+                    DropdownMenuItem(value: 'VENDIDO', child: Text('Vendido')),
+                    DropdownMenuItem(value: 'MUERTO', child: Text('Muerto')),
+                  ],
+                  onChanged: (v) {
+                    if (v != null) setState(() => _estado = v);
+                  },
+                ),
+                if (_estado != 'VIVO') ...[
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: _motivoCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Motivo del cambio de estado *',
+                      prefixIcon: Icon(Icons.info_outline),
+                      alignLabelWithHint: true,
+                    ),
+                    maxLines: 2,
+                    validator: (v) {
+                      if (v == null || v.trim().isEmpty) return 'Requerido cuando el estado no es Vivo';
+                      return null;
+                    },
+                  ),
+                ],
+              ]),
+              const SizedBox(height: 16),
+              _buildSection('Detalles Físicos', [
+                TextFormField(
+                  controller: _pesoNacCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Peso al Nacimiento (kg)',
+                    prefixIcon: Icon(Icons.monitor_weight),
+                  ),
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                  validator: (v) {
+                    if (v != null && v.isNotEmpty) {
+                      final n = double.tryParse(v);
+                      if (n == null) return 'Debe ser un número válido';
+                      if (n <= 0) return 'Debe ser mayor a 0';
+                      if (n > 999.99) return 'No puede superar 999.99 kg';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 16),
+                InkWell(
+                  onTap: _selectDate,
+                  child: InputDecorator(
+                    decoration: InputDecoration(
+                      labelText: 'Fecha de Nacimiento *',
+                      prefixIcon: const Icon(Icons.calendar_today),
+                      errorText: _fieldErrors['fecha_nacimiento'],
+                    ),
+                    child: Text(
+                      '${_fechaNac.day}/${_fechaNac.month}/${_fechaNac.year}',
+                    ),
                   ),
                 ),
-              ),
+              ]),
               const SizedBox(height: 16),
-              TextFormField(
-                controller: _razaCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Raza',
-                  prefixIcon: Icon(Icons.category),
+              _buildSection('Genealogía', [
+                AnimalSelector(
+                  label: 'Padre',
+                  icon: Icons.male,
+                  errorText: _fieldErrors['padre'],
+                  candidatos: _candidatos,
+                  selected: _padre,
+                  loading: _loadingCandidatos,
+                  onSelected: (c) => setState(() => _padre = c),
                 ),
-                validator: (v) {
-                  if (v != null && v.length > 50) return 'Máximo 50 caracteres';
-                  return null;
-                },
-              ),
-              const SizedBox(height: 16),
-              _ParentSelector(
-                label: 'Padre',
-                icon: Icons.male,
-                errorText: _fieldErrors['padre'],
-                candidatos: _candidatos,
-                selected: _padre,
-                loading: _loadingCandidatos,
-                onSelected: (c) => setState(() => _padre = c),
-              ),
-              const SizedBox(height: 16),
-              _ParentSelector(
-                label: 'Madre',
-                icon: Icons.female,
-                errorText: _fieldErrors['madre'],
-                candidatos: _candidatos,
-                selected: _madre,
-                loading: _loadingCandidatos,
-                onSelected: (c) => setState(() => _madre = c),
-              ),
-              const SizedBox(height: 16),
-              _FotoPicker(
-                path: _fotoPath,
-                onPick: _pickFoto,
-                onClear: () => setState(() => _fotoPath = null),
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _obsCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Observaciones',
-                  alignLabelWithHint: true,
+                const SizedBox(height: 16),
+                AnimalSelector(
+                  label: 'Madre',
+                  icon: Icons.female,
+                  errorText: _fieldErrors['madre'],
+                  candidatos: _candidatos,
+                  selected: _madre,
+                  loading: _loadingCandidatos,
+                  onSelected: (c) => setState(() => _madre = c),
                 ),
-                maxLines: 3,
-              ),
+              ]),
+              const SizedBox(height: 16),
+              _buildSection('Adicional', [
+                _FotoPicker(
+                  path: _fotoPath,
+                  onPick: _pickFoto,
+                  onClear: () => setState(() => _fotoPath = null),
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: _obsCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Observaciones',
+                    alignLabelWithHint: true,
+                  ),
+                  maxLines: 3,
+                ),
+              ]),
               const SizedBox(height: 24),
               LoadingButton(
                 loading: _saving,
@@ -381,232 +474,14 @@ class _AnimalFormScreenState extends ConsumerState<AnimalFormScreen> {
   }
 }
 
-class _ParentSelector extends StatelessWidget {
-  final String label;
+class _SexoCard extends StatelessWidget {
   final IconData icon;
-  final String? errorText;
-  final List<CandidatoModel> candidatos;
-  final CandidatoModel? selected;
-  final bool loading;
-  final ValueChanged<CandidatoModel?> onSelected;
-
-  const _ParentSelector({
-    required this.label,
-    required this.icon,
-    this.errorText,
-    required this.candidatos,
-    required this.selected,
-    required this.loading,
-    required this.onSelected,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: () => _showSearch(context),
-      borderRadius: BorderRadius.circular(12),
-      child: InputDecorator(
-        decoration: InputDecoration(
-          labelText: label,
-          prefixIcon: Icon(icon),
-          errorText: errorText,
-          suffixIcon: selected != null
-              ? IconButton(
-                  icon: const Icon(Icons.close),
-                  onPressed: () => onSelected(null),
-                )
-              : null,
-        ),
-        child: Text(
-          selected?.label ?? (loading ? 'Cargando...' : 'Toca para buscar'),
-          style: TextStyle(
-            color: selected != null ? null : Colors.grey,
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _showSearch(BuildContext context) {
-    final filtered = ValueNotifier<List<CandidatoModel>>(candidatos);
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      builder: (_) => _ParentSearchSheet(
-        label: label,
-        candidatos: candidatos,
-        filtered: filtered,
-        onSelected: (c) {
-          onSelected(c);
-          Navigator.pop(context);
-        },
-      ),
-    );
-  }
-}
-
-class _ParentSearchSheet extends StatefulWidget {
-  final String label;
-  final List<CandidatoModel> candidatos;
-  final ValueNotifier<List<CandidatoModel>> filtered;
-  final ValueChanged<CandidatoModel> onSelected;
-
-  const _ParentSearchSheet({
-    required this.label,
-    required this.candidatos,
-    required this.filtered,
-    required this.onSelected,
-  });
-
-  @override
-  State<_ParentSearchSheet> createState() => _ParentSearchSheetState();
-}
-
-class _ParentSearchSheetState extends State<_ParentSearchSheet> {
-  final _searchCtrl = TextEditingController();
-  String? _especieFiltro;
-
-  @override
-  void dispose() {
-    _searchCtrl.dispose();
-    super.dispose();
-  }
-
-  List<CandidatoModel> get _baseList {
-    var list = widget.candidatos;
-    if (_especieFiltro != null) {
-      list = list.where((c) => c.especie == _especieFiltro).toList();
-    }
-    return list;
-  }
-
-  void _filter(String query) {
-    final base = _baseList;
-    if (query.isEmpty) {
-      widget.filtered.value = base;
-      return;
-    }
-    final lower = query.toLowerCase();
-    widget.filtered.value = base.where((c) {
-      return c.arete.toLowerCase().contains(lower) ||
-          c.nombre.toLowerCase().contains(lower);
-    }).toList();
-  }
-
-  void _setEspecie(String? especie) {
-    setState(() => _especieFiltro = especie);
-    _filter(_searchCtrl.text);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return DraggableScrollableSheet(
-      initialChildSize: 0.6,
-      minChildSize: 0.4,
-      maxChildSize: 0.9,
-      expand: false,
-      builder: (_, scrollCtrl) {
-        return Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            children: [
-              Text('Buscar ${widget.label}',
-                  style: Theme.of(context).textTheme.titleLarge),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _searchCtrl,
-                decoration: const InputDecoration(
-                  hintText: 'Buscar por arete o nombre...',
-                  prefixIcon: Icon(Icons.search),
-                ),
-                onChanged: _filter,
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  _EspecieChip(
-                    label: 'Todas',
-                    selected: _especieFiltro == null,
-                    onTap: () => _setEspecie(null),
-                  ),
-                  const SizedBox(width: 6),
-                  _EspecieChip(
-                    label: 'Alpaca',
-                    selected: _especieFiltro == 'alpaca',
-                    onTap: () => _setEspecie('alpaca'),
-                  ),
-                  const SizedBox(width: 6),
-                  _EspecieChip(
-                    label: 'Llama',
-                    selected: _especieFiltro == 'llama',
-                    onTap: () => _setEspecie('llama'),
-                  ),
-                  const SizedBox(width: 6),
-                  _EspecieChip(
-                    label: 'Ovino',
-                    selected: _especieFiltro == 'ovino',
-                    onTap: () => _setEspecie('ovino'),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Expanded(
-                child: ValueListenableBuilder<List<CandidatoModel>>(
-                  valueListenable: widget.filtered,
-                  builder: (_, list, __) {
-                    if (list.isEmpty) {
-                      return const Center(child: Text('Sin resultados'));
-                    }
-                    return ListView.separated(
-                      controller: scrollCtrl,
-                      itemCount: list.length,
-                      separatorBuilder: (_, __) => const Divider(height: 1),
-                      itemBuilder: (_, i) {
-                        final c = list[i];
-                        final especie = c.especie == 'alpaca'
-                            ? 'Alpaca'
-                            : c.especie == 'llama'
-                                ? 'Llama'
-                                : 'Ovino';
-                        final sexo = c.sexo == 'macho' ? 'Macho' : 'Hembra';
-                        final cat = categoriaEdadLabel(c.categoriaEdad);
-                        return ListTile(
-                          leading: CircleAvatar(
-                            backgroundColor: c.sexo == 'macho'
-                                ? Colors.blue.shade100
-                                : Colors.pink.shade100,
-                            child: Icon(
-                              c.sexo == 'macho'
-                                  ? Icons.male
-                                  : Icons.female,
-                              color: c.sexo == 'macho'
-                                  ? Colors.blue.shade700
-                                  : Colors.pink.shade700,
-                            ),
-                          ),
-                          title: Text(c.label),
-                          subtitle: Text('$especie • $sexo • $cat'),
-                          onTap: () => widget.onSelected(c),
-                        );
-                      },
-                    );
-                  },
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-}
-
-class _EspecieChip extends StatelessWidget {
   final String label;
   final bool selected;
   final VoidCallback onTap;
 
-  const _EspecieChip({
+  const _SexoCard({
+    required this.icon,
     required this.label,
     required this.selected,
     required this.onTap,
@@ -614,13 +489,35 @@ class _EspecieChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return FilterChip(
-      label: Text(label, style: const TextStyle(fontSize: 12)),
-      selected: selected,
-      onSelected: (_) => onTap(),
-      showCheckmark: false,
-      selectedColor: AppTheme.primaryLight.withValues(alpha: 0.25),
-      visualDensity: VisualDensity.compact,
+    return Card(
+      elevation: selected ? 2 : 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(
+          color: selected ? AppTheme.primary : Colors.grey.shade300,
+          width: selected ? 2 : 1,
+        ),
+      ),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          child: Column(
+            children: [
+              Icon(icon, size: 32,
+                  color: selected ? AppTheme.primary : Colors.grey),
+              const SizedBox(height: 4),
+              Text(label,
+                  style: TextStyle(
+                    fontWeight:
+                        selected ? FontWeight.bold : FontWeight.normal,
+                    color: selected ? AppTheme.primary : Colors.grey,
+                  )),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

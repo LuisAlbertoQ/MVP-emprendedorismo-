@@ -12,6 +12,19 @@ import 'package:front_genapp/ui/features/animales/views/animal_form_screen.dart'
 import 'package:front_genapp/ui/features/animales/views/arbol_screen.dart';
 import 'package:front_genapp/ui/features/perfil/views/perfil_screen.dart';
 import 'package:front_genapp/ui/features/reportes/views/reportes_screen.dart';
+import 'package:front_genapp/ui/features/gestion/views/gestion_screen.dart';
+import 'package:front_genapp/ui/features/gestion/views/reproductivo_screen.dart';
+import 'package:front_genapp/ui/features/gestion/views/financiero_screen.dart';
+import 'package:front_genapp/ui/features/consanguinidad/views/consanguinidad_screen.dart';
+import 'package:front_genapp/ui/features/fibra_ranking/views/fibra_ranking_screen.dart';
+import 'package:front_genapp/ui/features/empadres/views/empadre_list_screen.dart';
+import 'package:front_genapp/ui/features/empadres/views/empadre_form_screen.dart';
+import 'package:front_genapp/ui/features/partos/views/parto_list_screen.dart';
+import 'package:front_genapp/ui/features/partos/views/parto_form_screen.dart';
+import 'package:front_genapp/ui/features/costos/views/costo_list_screen.dart';
+import 'package:front_genapp/ui/features/costos/views/costo_form_screen.dart';
+import 'package:front_genapp/ui/features/ventas_fibra/views/venta_fibra_list_screen.dart';
+import 'package:front_genapp/ui/features/ventas_fibra/views/venta_fibra_form_screen.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
   final goRouter = GoRouter(
@@ -64,6 +77,92 @@ final routerProvider = Provider<GoRouter>((ref) {
                   GoRoute(
                     path: 'arbol',
                     builder: (_, state) => ArbolScreen(
+                      uid: state.pathParameters['uid']!,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          GoRoute(
+            path: '/gestion',
+            builder: (_, __) => const GestionScreen(),
+            routes: [
+              GoRoute(
+                path: 'consanguinidad',
+                builder: (_, __) => const ConsanguinidadScreen(),
+              ),
+              GoRoute(
+                path: 'fibra-ranking',
+                builder: (_, __) => const FibraRankingScreen(),
+              ),
+              GoRoute(
+                path: 'reproductivo',
+                builder: (_, __) => const ReproductivoScreen(),
+              ),
+              GoRoute(
+                path: 'financiero',
+                builder: (_, __) => const FinancieroScreen(),
+              ),
+              GoRoute(
+                path: 'empadres',
+                builder: (_, __) => const EmpadreListScreen(),
+                routes: [
+                  GoRoute(
+                    path: 'crear',
+                    builder: (_, __) => const EmpadreFormScreen(),
+                  ),
+                  GoRoute(
+                    path: ':uid/editar',
+                    builder: (_, state) => EmpadreFormScreen(
+                      uid: state.pathParameters['uid']!,
+                    ),
+                  ),
+                ],
+              ),
+              GoRoute(
+                path: 'partos',
+                builder: (_, __) => const PartoListScreen(),
+                routes: [
+                  GoRoute(
+                    path: 'crear',
+                    builder: (_, __) => const PartoFormScreen(),
+                  ),
+                  GoRoute(
+                    path: ':uid/editar',
+                    builder: (_, state) => PartoFormScreen(
+                      uid: state.pathParameters['uid']!,
+                    ),
+                  ),
+                ],
+              ),
+              GoRoute(
+                path: 'costos',
+                builder: (_, __) => const CostoListScreen(),
+                routes: [
+                  GoRoute(
+                    path: 'crear',
+                    builder: (_, __) => const CostoFormScreen(),
+                  ),
+                  GoRoute(
+                    path: ':uid/editar',
+                    builder: (_, state) => CostoFormScreen(
+                      uid: state.pathParameters['uid']!,
+                    ),
+                  ),
+                ],
+              ),
+              GoRoute(
+                path: 'ventas-fibra',
+                builder: (_, __) => const VentaFibraListScreen(),
+                routes: [
+                  GoRoute(
+                    path: 'crear',
+                    builder: (_, __) => const VentaFibraFormScreen(),
+                  ),
+                  GoRoute(
+                    path: ':uid/editar',
+                    builder: (_, state) => VentaFibraFormScreen(
                       uid: state.pathParameters['uid']!,
                     ),
                   ),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:front_genapp/data/services/api_service.dart';
 import 'package:front_genapp/data/models/produccion_model.dart';
 import 'package:front_genapp/ui/features/animales/providers/animal_provider.dart';
 
@@ -21,6 +22,9 @@ class ProduccionFormSheetState extends ConsumerState<ProduccionFormSheet> {
   late TextEditingController _pesoSucioCtrl;
   late TextEditingController _pesoLimpioCtrl;
   late TextEditingController _numeroEsquilaCtrl;
+  late TextEditingController _diametroCtrl;
+  late TextEditingController _confortCtrl;
+  late TextEditingController _medulacionCtrl;
   late TextEditingController _observacionesCtrl;
   bool _saving = false;
   String? _fechaError;
@@ -36,6 +40,12 @@ class ProduccionFormSheetState extends ConsumerState<ProduccionFormSheet> {
         text: p?.pesoVellonLimpioKg?.toString() ?? '');
     _numeroEsquilaCtrl = TextEditingController(
         text: p?.numeroEsquila?.toString() ?? '');
+    _diametroCtrl = TextEditingController(
+        text: p?.diametroFibraMicras?.toString() ?? '');
+    _confortCtrl = TextEditingController(
+        text: p?.factorConfort?.toString() ?? '');
+    _medulacionCtrl = TextEditingController(
+        text: p?.medulacionPct?.toString() ?? '');
     _observacionesCtrl = TextEditingController(text: p?.observaciones ?? '');
   }
 
@@ -44,6 +54,9 @@ class ProduccionFormSheetState extends ConsumerState<ProduccionFormSheet> {
     _pesoSucioCtrl.dispose();
     _pesoLimpioCtrl.dispose();
     _numeroEsquilaCtrl.dispose();
+    _diametroCtrl.dispose();
+    _confortCtrl.dispose();
+    _medulacionCtrl.dispose();
     _observacionesCtrl.dispose();
     super.dispose();
   }
@@ -84,6 +97,15 @@ class ProduccionFormSheetState extends ConsumerState<ProduccionFormSheet> {
         numeroEsquila: _numeroEsquilaCtrl.text.isNotEmpty
             ? int.tryParse(_numeroEsquilaCtrl.text)
             : null,
+        diametroFibraMicras: _diametroCtrl.text.isNotEmpty
+            ? double.tryParse(_diametroCtrl.text)
+            : null,
+        factorConfort: _confortCtrl.text.isNotEmpty
+            ? double.tryParse(_confortCtrl.text)
+            : null,
+        medulacionPct: _medulacionCtrl.text.isNotEmpty
+            ? double.tryParse(_medulacionCtrl.text)
+            : null,
         observaciones: _observacionesCtrl.text,
       );
       if (widget.produccion != null) {
@@ -98,7 +120,7 @@ class ProduccionFormSheetState extends ConsumerState<ProduccionFormSheet> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Error: $e')));
+            .showSnackBar(SnackBar(content: Text(ApiService.extractError(e))));
       }
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -208,6 +230,35 @@ class ProduccionFormSheetState extends ConsumerState<ProduccionFormSheet> {
                   }
                   return null;
                 },
+              ),
+              const SizedBox(height: 16),
+              Text('Fibra', style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              TextFormField(
+                controller: _diametroCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Diámetro de fibra (micras)',
+                  prefixIcon: Icon(Icons.straighten),
+                ),
+                keyboardType: TextInputType.number,
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _confortCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Factor de confort (%)',
+                  prefixIcon: Icon(Icons.thermostat),
+                ),
+                keyboardType: TextInputType.number,
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _medulacionCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Medulación (%)',
+                  prefixIcon: Icon(Icons.blur_on),
+                ),
+                keyboardType: TextInputType.number,
               ),
               const SizedBox(height: 16),
               TextFormField(

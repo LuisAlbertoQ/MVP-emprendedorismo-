@@ -3,7 +3,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.renderers import BaseRenderer
-from django.db.models import Q, Count, Value, IntegerField
+from django.db.models import Q, Count, Value, IntegerField, OuterRef, Subquery, Avg
 from django.utils import timezone
 from django.http import HttpResponse
 from drf_spectacular.utils import extend_schema, OpenApiParameter
@@ -36,14 +36,20 @@ class PDFRenderer(BaseRenderer):
     def render(self, data, media_type=None, renderer_context=None):
         return data
 
-from .models import Animal, Produccion, SyncStatus
-from .utils import calcular_categoria_edad
+from .models import Animal, Produccion, SyncStatus, Empadre, Parto, Costo, VentaFibra, RAZAS_POR_ESPECIE
+from .utils import calcular_categoria_edad, calcular_coeficiente_consanguinidad
 from .serializers import (
     AnimalSerializer, AnimalListSerializer, CandidatoSerializer,
     SyncInputSerializer, SyncOutputAnimalSerializer,
     SyncOutputSerializer,
     ProduccionSerializer,
     SyncOutputProduccionSerializer,
+    ConsanguinidadSerializer,
+    EmpadreSerializer, EmpadreListSerializer,
+    PartoSerializer, PartoListSerializer,
+    CostoSerializer, CostoListSerializer,
+    VentaFibraSerializer, VentaFibraListSerializer,
+    RankingFibraSerializer,
     ReporteSerializer
 )
 
@@ -138,6 +144,14 @@ class AnimalViewSet(viewsets.ModelViewSet):
         especie = request.query_params.get('especie')
         if especie:
             queryset = queryset.filter(especie=especie)
+        sexo = request.query_params.get('sexo')
+        if sexo:
+            queryset = queryset.filter(sexo=sexo)
+        include_uids = request.query_params.get('include_uids')
+        if include_uids:
+            uids = [u.strip() for u in include_uids.split(',') if u.strip()]
+            extra = Animal.objects.filter(usuario=request.user, uid__in=uids)
+            queryset = (queryset | extra).distinct()
         serializer = CandidatoSerializer(queryset, many=True)
         return Response(serializer.data)
 
@@ -176,6 +190,10 @@ class AnimalViewSet(viewsets.ModelViewSet):
             'plan': user.plan,
             'limite': user.limite_animales,
         })
+
+    @action(detail=False, methods=['get'])
+    def razas_por_especie(self, request):
+        return Response(RAZAS_POR_ESPECIE)
 
 
 class ProduccionViewSet(viewsets.ModelViewSet):
@@ -637,3 +655,152 @@ class ReporteProduccionView(APIView):
         response = HttpResponse(buffer.read(), content_type='application/pdf')
         response['Content-Disposition'] = 'attachment; filename="esquilas.pdf"'
         return response
+
+
+class ConsanguinidadViewSet(viewsets.ReadOnlyModelViewSet):
+    serializer_class = ConsanguinidadSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    pagination_class = None
+
+    def get_queryset(self):
+        return Animal.objects.filter(
+            usuario=self.request.user,
+            padre__isnull=False,
+            madre__isnull=False
+        ).select_related('padre', 'madre')
+
+    @action(detail=False, methods=['get'])
+    def arbol(self, request):
+        uid = request.query_params.get('uid')
+        if not uid:
+            return Response({'error': 'Se requiere el parámetro uid'}, status=400)
+        try:
+            animal = Animal.objects.get(uid=uid, usuario=request.user)
+        except Animal.DoesNotExist:
+            return Response({'error': 'Animal no encontrado'}, status=404)
+
+        def build_tree(a, depth=0, max_depth=5):
+            if a is None or depth > max_depth:
+                return None
+            hijo = calcular_coeficiente_consanguinidad(a)
+            return {
+                'uid': str(a.uid),
+                'arete': a.arete,
+                'nombre': a.nombre or '',
+                'estado': a.estado,
+                'coeficiente_consanguinidad': hijo,
+                'padre': build_tree(a.padre, depth + 1, max_depth),
+                'madre': build_tree(a.madre, depth + 1, max_depth),
+            }
+
+        return Response(build_tree(animal))
+
+
+class EmpadreViewSet(viewsets.ModelViewSet):
+    permission_classes = [permissions.IsAuthenticated]
+    pagination_class = None
+    lookup_field = 'uid'
+
+    def get_serializer_class(self):
+        if self.action == 'list':
+            return EmpadreListSerializer
+        return EmpadreSerializer
+
+    def get_queryset(self):
+        qs = Empadre.objects.filter(
+            hembra__usuario=self.request.user
+        ).select_related('hembra', 'macho').order_by('-fecha_empadre')
+        hembra_uid = self.request.query_params.get('hembra_uid')
+        if hembra_uid:
+            qs = qs.filter(hembra__uid=hembra_uid)
+        resultado = self.request.query_params.get('resultado')
+        if resultado:
+            qs = qs.filter(resultado=resultado)
+        return qs
+
+    def perform_create(self, serializer):
+        serializer.save(usuario=self.request.user)
+
+
+class PartoViewSet(viewsets.ModelViewSet):
+    permission_classes = [permissions.IsAuthenticated]
+    pagination_class = None
+    lookup_field = 'uid'
+
+    def get_serializer_class(self):
+        if self.action == 'list':
+            return PartoListSerializer
+        return PartoSerializer
+
+    def get_queryset(self):
+        return Parto.objects.filter(
+            hembra__usuario=self.request.user
+        ).select_related('hembra', 'empadre').order_by('-fecha_parto')
+
+    def perform_create(self, serializer):
+        serializer.save(usuario=self.request.user)
+
+
+class CostoViewSet(viewsets.ModelViewSet):
+    permission_classes = [permissions.IsAuthenticated]
+    pagination_class = None
+    lookup_field = 'uid'
+
+    def get_serializer_class(self):
+        if self.action == 'list':
+            return CostoListSerializer
+        return CostoSerializer
+
+    def get_queryset(self):
+        return Costo.objects.filter(
+            animal__usuario=self.request.user
+        ).select_related('animal').order_by('-fecha')
+
+    def perform_create(self, serializer):
+        serializer.save(usuario=self.request.user)
+
+
+class VentaFibraViewSet(viewsets.ModelViewSet):
+    permission_classes = [permissions.IsAuthenticated]
+    pagination_class = None
+    lookup_field = 'uid'
+
+    def get_serializer_class(self):
+        if self.action == 'list':
+            return VentaFibraListSerializer
+        return VentaFibraSerializer
+
+    def get_queryset(self):
+        return VentaFibra.objects.filter(
+            animal__usuario=self.request.user
+        ).select_related('animal', 'produccion').order_by('-fecha_venta')
+
+    def perform_create(self, serializer):
+        serializer.save(usuario=self.request.user)
+
+
+class RankingFibraView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        qs = Animal.objects.filter(usuario=request.user).prefetch_related('producciones')
+        ranking = []
+        for animal in qs:
+            ultima = animal.producciones.order_by('-fecha_esquila').first()
+            if not ultima or not ultima.diametro_fibra_micras:
+                continue
+            ranking.append({
+                'uid': str(animal.uid),
+                'arete': animal.arete,
+                'nombre': animal.nombre or '',
+                'especie': animal.especie,
+                'categoria_edad': calcular_categoria_edad(animal.especie, animal.fecha_nacimiento),
+                'diametro_fibra_micras': float(ultima.diametro_fibra_micras),
+                'factor_confort': float(ultima.factor_confort) if ultima.factor_confort else None,
+                'medulacion_pct': float(ultima.medulacion_pct) if ultima.medulacion_pct else None,
+                'rendimiento_pct': float(ultima.rendimiento_pct) if ultima.rendimiento_pct else None,
+                'fecha_esquila': ultima.fecha_esquila,
+                'numero_esquila': ultima.numero_esquila,
+            })
+        ranking.sort(key=lambda x: (x['diametro_fibra_micras'] is None, x['diametro_fibra_micras']))
+        return Response(ranking[:100])

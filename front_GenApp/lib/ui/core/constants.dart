@@ -29,4 +29,17 @@ class AppRoutes {
   static String animalArbol(String uid) => '/animales/$uid/arbol';
   static const String perfil = '/perfil';
   static const String reportes = '/reportes';
+  static const String gestion = '/gestion';
+  static const String consanguinidad = '/gestion/consanguinidad';
+  static const String fibraRanking = '/gestion/fibra-ranking';
+  static const String gestionReproductivo = '/gestion/reproductivo';
+  static const String gestionFinanciero = '/gestion/financiero';
+  static const String empadres = '/gestion/empadres';
+  static const String empadresCrear = '/gestion/empadres/crear';
+  static const String partos = '/gestion/partos';
+  static const String partosCrear = '/gestion/partos/crear';
+  static const String costos = '/gestion/costos';
+  static const String costosCrear = '/gestion/costos/crear';
+  static const String ventasFibra = '/gestion/ventas-fibra';
+  static const String ventasFibraCrear = '/gestion/ventas-fibra/crear';
 }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:front_genapp/data/models/animal_model.dart';
 import 'package:front_genapp/ui/features/animales/providers/animal_provider.dart';
 
@@ -47,71 +48,78 @@ class _ArbolNodeWidget extends StatelessWidget {
             : Colors.grey.shade300;
 
     final children = <Widget>[
-      Padding(
-        padding: EdgeInsets.only(left: indent),
-        child: Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          decoration: BoxDecoration(
-            color: bgColor,
+      Container(
+        width: double.infinity,
+        margin: EdgeInsets.only(left: indent),
+        decoration: BoxDecoration(
+          color: bgColor,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: borderColor),
+        ),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: borderColor),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
+            onTap: () => context.push('/animales/${node.uid}'),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Expanded(
-                    child: Text(
-                      node.nombre.isNotEmpty
-                          ? '${node.arete} - ${node.nombre}'
-                          : node.arete,
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          node.nombre.isNotEmpty
+                              ? '${node.arete} - ${node.nombre}'
+                              : node.arete,
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: node.estado == 'VIVO'
+                              ? Colors.green.shade100
+                              : node.estado == 'VENDIDO'
+                                  ? Colors.orange.shade100
+                                  : Colors.red.shade100,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          _estadoLabel(node.estado),
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            fontWeight: FontWeight.w600,
+                            color: node.estado == 'VIVO'
+                                ? Colors.green.shade800
+                                : node.estado == 'VENDIDO'
+                                    ? Colors.orange.shade800
+                                    : Colors.red.shade800,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${_especieLabel(node.especie)} • ${_sexoLabel(node.sexo)}',
+                    style: theme.textTheme.bodySmall,
+                  ),
+                  if (node.fechaNacimiento != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Text(
+                        '${node.fechaNacimiento!.day}/${node.fechaNacimiento!.month}/${node.fechaNacimiento!.year}',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: Colors.grey.shade600,
+                        ),
                       ),
                     ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: node.estado == 'VIVO'
-                          ? Colors.green.shade100
-                          : node.estado == 'VENDIDO'
-                              ? Colors.orange.shade100
-                              : Colors.red.shade100,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      _estadoLabel(node.estado),
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        fontWeight: FontWeight.w600,
-                        color: node.estado == 'VIVO'
-                            ? Colors.green.shade800
-                            : node.estado == 'VENDIDO'
-                                ? Colors.orange.shade800
-                                : Colors.red.shade800,
-                      ),
-                    ),
-                  ),
                 ],
               ),
-              const SizedBox(height: 4),
-              Text(
-                '${_especieLabel(node.especie)} • ${_sexoLabel(node.sexo)}',
-                style: theme.textTheme.bodySmall,
-              ),
-              if (node.fechaNacimiento != null)
-                Padding(
-                  padding: const EdgeInsets.only(top: 2),
-                  child: Text(
-                    '${node.fechaNacimiento!.day}/${node.fechaNacimiento!.month}/${node.fechaNacimiento!.year}',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: Colors.grey.shade600,
-                    ),
-                  ),
-                ),
-            ],
+            ),
           ),
         ),
       ),

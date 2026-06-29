@@ -321,6 +321,34 @@ class _QuickActions extends StatelessWidget {
             ),
           ],
         ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: _ActionChip(
+                icon: Icons.apps,
+                label: 'Gestión',
+                onTap: () => context.go(AppRoutes.gestion),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _ActionChip(
+                icon: Icons.favorite_border,
+                label: 'Empadres',
+                onTap: () => context.push(AppRoutes.empadresCrear),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _ActionChip(
+                icon: Icons.account_balance_wallet,
+                label: 'Costos',
+                onTap: () => context.push(AppRoutes.costosCrear),
+              ),
+            ),
+          ],
+        ),
       ],
     );
   }

@@ -6,8 +6,8 @@ from rest_framework import status
 from django.urls import reverse
 from django.core.exceptions import ValidationError
 from usuarios.models import Usuario
-from .models import Animal, Especie, Sexo, EstadoAnimal, SyncStatus, Produccion
-from .utils import calcular_categoria_edad
+from .models import Animal, Especie, Sexo, EstadoAnimal, SyncStatus, Produccion, Empadre, Parto, Costo, VentaFibra
+from .utils import calcular_categoria_edad, calcular_coeficiente_consanguinidad, calcular_fecha_probable_parto, PERIODO_GESTACION
 
 
 class AnimalModelTests(APITestCase):
@@ -665,3 +665,425 @@ class ProduccionSyncTests(APITestCase):
         }, format='json')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertFalse(Produccion.objects.filter(uid=p.uid).exists())
+
+
+class ConsanguinidadAlgorithmTests(APITestCase):
+    def setUp(self):
+        self.user = Usuario.objects.create_user(
+            username='cons1', telefono='cons1', password='123456'
+        )
+
+    def test_padre_hija_25_pct(self):
+        padre = Animal.objects.create(
+            uid=uuid.uuid4(), arete='PADRE', especie='alpaca', sexo='macho',
+            fecha_nacimiento='2021-01-01', usuario=self.user
+        )
+        hija = Animal.objects.create(
+            uid=uuid.uuid4(), arete='HIJA', especie='alpaca', sexo='hembra',
+            fecha_nacimiento='2022-06-01', usuario=self.user,
+            padre=padre
+        )
+        hijo = Animal.objects.create(
+            uid=uuid.uuid4(), arete='HIJO', especie='alpaca', sexo='macho',
+            fecha_nacimiento='2023-01-01', usuario=self.user,
+            padre=padre, madre=hija
+        )
+        coef = calcular_coeficiente_consanguinidad(hijo)
+        self.assertAlmostEqual(coef, 0.25, places=4)
+
+    def test_medio_hermanos_12_5_pct(self):
+        padre = Animal.objects.create(
+            uid=uuid.uuid4(), arete='PADRE2', especie='alpaca', sexo='macho',
+            fecha_nacimiento='2021-01-01', usuario=self.user
+        )
+        madre1 = Animal.objects.create(
+            uid=uuid.uuid4(), arete='MADRE1', especie='alpaca', sexo='hembra',
+            fecha_nacimiento='2021-06-01', usuario=self.user
+        )
+        madre2 = Animal.objects.create(
+            uid=uuid.uuid4(), arete='MADRE2', especie='alpaca', sexo='hembra',
+            fecha_nacimiento='2021-06-01', usuario=self.user
+        )
+        hijo1 = Animal.objects.create(
+            uid=uuid.uuid4(), arete='H1', especie='alpaca', sexo='macho',
+            fecha_nacimiento='2022-01-01', usuario=self.user,
+            padre=padre, madre=madre1
+        )
+        hijo2 = Animal.objects.create(
+            uid=uuid.uuid4(), arete='H2', especie='alpaca', sexo='hembra',
+            fecha_nacimiento='2022-06-01', usuario=self.user,
+            padre=padre, madre=madre2
+        )
+        hijo = Animal.objects.create(
+            uid=uuid.uuid4(), arete='HIJO-MS', especie='alpaca', sexo='macho',
+            fecha_nacimiento='2023-01-01', usuario=self.user,
+            padre=hijo1, madre=hijo2
+        )
+        coef = calcular_coeficiente_consanguinidad(hijo)
+        self.assertAlmostEqual(coef, 0.125, places=4)
+
+    def test_no_parents_returns_0(self):
+        animal = Animal.objects.create(
+            uid=uuid.uuid4(), arete='SIN-PADRES', especie='alpaca', sexo='macho',
+            fecha_nacimiento='2023-01-01', usuario=self.user
+        )
+        self.assertEqual(calcular_coeficiente_consanguinidad(animal), 0.0)
+
+    def test_no_common_ancestors_returns_0(self):
+        padre = Animal.objects.create(
+            uid=uuid.uuid4(), arete='P-NOCOM', especie='alpaca', sexo='macho',
+            fecha_nacimiento='2021-01-01', usuario=self.user
+        )
+        madre = Animal.objects.create(
+            uid=uuid.uuid4(), arete='M-NOCOM', especie='alpaca', sexo='hembra',
+            fecha_nacimiento='2021-01-01', usuario=self.user
+        )
+        hijo = Animal.objects.create(
+            uid=uuid.uuid4(), arete='H-NOCOM', especie='alpaca', sexo='macho',
+            fecha_nacimiento='2023-01-01', usuario=self.user,
+            padre=padre, madre=madre
+        )
+        self.assertEqual(calcular_coeficiente_consanguinidad(hijo), 0.0)
+
+    def test_consanguinidad_endpoint(self):
+        self.client.force_authenticate(user=self.user)
+        padre = Animal.objects.create(
+            uid=uuid.uuid4(), arete='CEP', especie='alpaca', sexo='macho',
+            fecha_nacimiento='2021-01-01', usuario=self.user
+        )
+        hija = Animal.objects.create(
+            uid=uuid.uuid4(), arete='CEH', especie='alpaca', sexo='hembra',
+            fecha_nacimiento='2022-06-01', usuario=self.user,
+            padre=padre
+        )
+        hijo = Animal.objects.create(
+            uid=uuid.uuid4(), arete='CEHIJO', especie='alpaca', sexo='macho',
+            fecha_nacimiento='2023-01-01', usuario=self.user,
+            padre=padre, madre=hija
+        )
+        response = self.client.get(reverse('consanguinidad-list'))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        hijos_data = [a for a in response.data if a['uid'] == str(hijo.uid)]
+        self.assertEqual(len(hijos_data), 1)
+        self.assertAlmostEqual(float(hijos_data[0]['coeficiente']), 0.25, places=4)
+
+
+class FechaProbablePartoTests(APITestCase):
+    def test_alpaca_345_dias(self):
+        from datetime import date
+        result = calcular_fecha_probable_parto('alpaca', date(2024, 1, 1))
+        self.assertEqual(result, date(2024, 12, 11))
+
+    def test_llama_345_dias(self):
+        from datetime import date
+        result = calcular_fecha_probable_parto('llama', date(2024, 6, 15))
+        self.assertEqual(result, date(2025, 5, 26))
+
+    def test_ovino_150_dias(self):
+        from datetime import date
+        result = calcular_fecha_probable_parto('ovino', date(2024, 1, 1))
+        self.assertEqual(result, date(2024, 5, 30))
+
+    def test_unknown_especie_returns_none(self):
+        from datetime import date
+        result = calcular_fecha_probable_parto('vaca', date(2024, 1, 1))
+        self.assertIsNone(result)
+
+    def test_none_fecha_returns_none(self):
+        result = calcular_fecha_probable_parto('alpaca', None)
+        self.assertIsNone(result)
+
+    def test_fecha_probable_in_empadre_list(self):
+        user = Usuario.objects.create_user(
+            username='fpp1', telefono='fpp1', password='123456'
+        )
+        self.client.force_authenticate(user=user)
+        hembra = Animal.objects.create(
+            uid=uuid.uuid4(), arete='FPP-H', especie='alpaca', sexo='hembra',
+            fecha_nacimiento='2022-01-01', usuario=user
+        )
+        macho = Animal.objects.create(
+            uid=uuid.uuid4(), arete='FPP-M', especie='alpaca', sexo='macho',
+            fecha_nacimiento='2021-01-01', usuario=user
+        )
+        Empadre.objects.create(
+            uid=uuid.uuid4(), hembra=hembra, macho=macho, usuario=user,
+            fecha_empadre='2024-01-01'
+        )
+        response = self.client.get(reverse('empadre-list'))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn('fecha_probable_parto', response.data[0])
+        self.assertIsNotNone(response.data[0]['fecha_probable_parto'])
+
+
+class EmpadreAPITests(APITestCase):
+    def setUp(self):
+        self.user = Usuario.objects.create_user(
+            username='emp1', telefono='emp1', password='123456'
+        )
+        self.client.force_authenticate(user=self.user)
+        self.hembra = Animal.objects.create(
+            uid=uuid.uuid4(), arete='EMP-H', especie='alpaca', sexo='hembra',
+            fecha_nacimiento='2022-01-01', usuario=self.user
+        )
+        self.macho = Animal.objects.create(
+            uid=uuid.uuid4(), arete='EMP-M', especie='alpaca', sexo='macho',
+            fecha_nacimiento='2021-01-01', usuario=self.user
+        )
+
+    def test_create_empadre(self):
+        response = self.client.post(reverse('empadre-list'), {
+            'hembra_write_uid': str(self.hembra.uid),
+            'macho_write_uid': str(self.macho.uid),
+            'fecha_empadre': '2024-01-15',
+        }, format='json')
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertIn('fecha_probable_parto', response.data)
+        self.assertEqual(Empadre.objects.count(), 1)
+
+    def test_create_empadre_with_resultado(self):
+        response = self.client.post(reverse('empadre-list'), {
+            'hembra_write_uid': str(self.hembra.uid),
+            'macho_write_uid': str(self.macho.uid),
+            'fecha_empadre': '2024-01-15',
+            'resultado': 'positivo',
+        }, format='json')
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data.get('resultado'), 'positivo')
+
+    def test_create_same_animal_fails(self):
+        response = self.client.post(reverse('empadre-list'), {
+            'hembra_write_uid': str(self.hembra.uid),
+            'macho_write_uid': str(self.hembra.uid),
+            'fecha_empadre': '2024-01-15',
+        }, format='json')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_list_empadres(self):
+        Empadre.objects.create(
+            uid=uuid.uuid4(), hembra=self.hembra, macho=self.macho,
+            usuario=self.user, fecha_empadre='2024-01-15'
+        )
+        response = self.client.get(reverse('empadre-list'))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 1)
+        self.assertIn('hembra_arete', response.data[0])
+        self.assertIn('macho_arete', response.data[0])
+
+    def test_delete_empadre(self):
+        e = Empadre.objects.create(
+            uid=uuid.uuid4(), hembra=self.hembra, macho=self.macho,
+            usuario=self.user, fecha_empadre='2024-01-15'
+        )
+        response = self.client.delete(reverse('empadre-detail', kwargs={'uid': e.uid}))
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertEqual(Empadre.objects.count(), 0)
+
+    def test_empadre_other_user_invisible(self):
+        otro = Usuario.objects.create_user(
+            username='emp2', telefono='emp2', password='123456'
+        )
+        otro_hembra = Animal.objects.create(
+            uid=uuid.uuid4(), arete='E2-H', especie='alpaca', sexo='hembra',
+            fecha_nacimiento='2022-01-01', usuario=otro
+        )
+        otro_macho = Animal.objects.create(
+            uid=uuid.uuid4(), arete='E2-M', especie='alpaca', sexo='macho',
+            fecha_nacimiento='2021-01-01', usuario=otro
+        )
+        Empadre.objects.create(
+            uid=uuid.uuid4(), hembra=otro_hembra, macho=otro_macho,
+            usuario=otro, fecha_empadre='2024-01-15'
+        )
+        response = self.client.get(reverse('empadre-list'))
+        self.assertEqual(len(response.data), 0)
+
+
+class PartoAPITests(APITestCase):
+    def setUp(self):
+        self.user = Usuario.objects.create_user(
+            username='parto1', telefono='parto1', password='123456'
+        )
+        self.client.force_authenticate(user=self.user)
+        self.hembra = Animal.objects.create(
+            uid=uuid.uuid4(), arete='PARTO-H', especie='alpaca', sexo='hembra',
+            fecha_nacimiento='2021-01-01', usuario=self.user
+        )
+
+    def test_create_parto_minimal(self):
+        response = self.client.post(reverse('parto-list'), {
+            'hembra_write_uid': str(self.hembra.uid),
+            'fecha_parto': '2024-06-01',
+            'numero_crias': 1,
+        }, format='json')
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(Parto.objects.count(), 1)
+
+    def test_create_parto_with_incidencias(self):
+        response = self.client.post(reverse('parto-list'), {
+            'hembra_write_uid': str(self.hembra.uid),
+            'fecha_parto': '2024-06-01',
+            'numero_crias': 2,
+            'incidencias': 'Distocia leve',
+        }, format='json')
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data.get('incidencias'), 'Distocia leve')
+
+    def test_list_partos_shows_incidencias(self):
+        Parto.objects.create(
+            uid=uuid.uuid4(), hembra=self.hembra, usuario=self.user,
+            fecha_parto='2024-06-01', numero_crias=1,
+            incidencias='Aborto'
+        )
+        response = self.client.get(reverse('parto-list'))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn('incidencias', response.data[0])
+        self.assertEqual(response.data[0]['incidencias'], 'Aborto')
+
+    def test_update_parto(self):
+        p = Parto.objects.create(
+            uid=uuid.uuid4(), hembra=self.hembra, usuario=self.user,
+            fecha_parto='2024-06-01', numero_crias=1
+        )
+        response = self.client.patch(
+            reverse('parto-detail', kwargs={'uid': p.uid}),
+            {'numero_crias': 3}, format='json'
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        p.refresh_from_db()
+        self.assertEqual(p.numero_crias, 3)
+
+    def test_delete_parto(self):
+        p = Parto.objects.create(
+            uid=uuid.uuid4(), hembra=self.hembra, usuario=self.user,
+            fecha_parto='2024-06-01', numero_crias=1
+        )
+        response = self.client.delete(reverse('parto-detail', kwargs={'uid': p.uid}))
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertEqual(Parto.objects.count(), 0)
+
+    def test_future_parto_fails(self):
+        tomorrow = date.today() + timedelta(days=1)
+        response = self.client.post(reverse('parto-list'), {
+            'hembra_write_uid': str(self.hembra.uid),
+            'fecha_parto': tomorrow.isoformat(),
+            'numero_crias': 1,
+        }, format='json')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+
+class CostoAPITests(APITestCase):
+    def setUp(self):
+        self.user = Usuario.objects.create_user(
+            username='costo1', telefono='costo1', password='123456'
+        )
+        self.client.force_authenticate(user=self.user)
+        self.animal = Animal.objects.create(
+            uid=uuid.uuid4(), arete='COSTO-A', especie='alpaca', sexo='macho',
+            fecha_nacimiento='2022-01-01', usuario=self.user
+        )
+
+    def test_create_costo(self):
+        response = self.client.post(reverse('costo-list'), {
+            'animal_write_uid': str(self.animal.uid),
+            'tipo': 'alimentacion',
+            'monto': '150.00',
+            'fecha': '2024-06-01',
+        }, format='json')
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(Costo.objects.count(), 1)
+
+    def test_create_costo_with_descripcion(self):
+        response = self.client.post(reverse('costo-list'), {
+            'animal_write_uid': str(self.animal.uid),
+            'tipo': 'sanidad',
+            'monto': '80.50',
+            'fecha': '2024-06-01',
+            'descripcion': 'Vacuna anual',
+        }, format='json')
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data.get('descripcion'), 'Vacuna anual')
+
+    def test_list_costos_shows_total(self):
+        Costo.objects.create(
+            uid=uuid.uuid4(), animal=self.animal, usuario=self.user,
+            tipo='alimentacion', monto=Decimal('100.00'), fecha='2024-06-01'
+        )
+        Costo.objects.create(
+            uid=uuid.uuid4(), animal=self.animal, usuario=self.user,
+            tipo='transporte', monto=Decimal('50.00'), fecha='2024-06-15'
+        )
+        response = self.client.get(reverse('costo-list'))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 2)
+
+    def test_delete_costo(self):
+        c = Costo.objects.create(
+            uid=uuid.uuid4(), animal=self.animal, usuario=self.user,
+            tipo='otro', monto=Decimal('25.00'), fecha='2024-06-01'
+        )
+        response = self.client.delete(reverse('costo-detail', kwargs={'uid': c.uid}))
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertEqual(Costo.objects.count(), 0)
+
+
+class VentaFibraAPITests(APITestCase):
+    def setUp(self):
+        self.user = Usuario.objects.create_user(
+            username='vf1', telefono='vf1', password='123456'
+        )
+        self.client.force_authenticate(user=self.user)
+        self.animal = Animal.objects.create(
+            uid=uuid.uuid4(), arete='VF-A', especie='alpaca', sexo='macho',
+            fecha_nacimiento='2022-01-01', usuario=self.user
+        )
+
+    def test_create_venta_fibra(self):
+        response = self.client.post(reverse('ventafibra-list'), {
+            'animal_write_uid': str(self.animal.uid),
+            'kg_vendidos': '3.50',
+            'precio_kg': '45.00',
+            'fecha_venta': '2024-06-15',
+        }, format='json')
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(VentaFibra.objects.count(), 1)
+
+    def test_venta_fibra_ingreso_total(self):
+        response = self.client.post(reverse('ventafibra-list'), {
+            'animal_write_uid': str(self.animal.uid),
+            'kg_vendidos': '3.50',
+            'precio_kg': '45.00',
+            'fecha_venta': '2024-06-15',
+        }, format='json')
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        vf = VentaFibra.objects.first()
+        self.assertAlmostEqual(float(vf.ingreso_total), 157.50, places=2)
+
+    def test_list_ventas_fibra(self):
+        VentaFibra.objects.create(
+            uid=uuid.uuid4(), animal=self.animal, usuario=self.user,
+            kg_vendidos=Decimal('2.00'), precio_kg=Decimal('50.00'),
+            fecha_venta='2024-06-01'
+        )
+        response = self.client.get(reverse('ventafibra-list'))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 1)
+
+    def test_list_venta_shows_ingreso_total(self):
+        VentaFibra.objects.create(
+            uid=uuid.uuid4(), animal=self.animal, usuario=self.user,
+            kg_vendidos=Decimal('2.00'), precio_kg=Decimal('50.00'),
+            fecha_venta='2024-06-01'
+        )
+        response = self.client.get(reverse('ventafibra-list'))
+        self.assertIn('ingreso_total', response.data[0])
+
+    def test_delete_venta_fibra(self):
+        vf = VentaFibra.objects.create(
+            uid=uuid.uuid4(), animal=self.animal, usuario=self.user,
+            kg_vendidos=Decimal('2.00'), precio_kg=Decimal('50.00'),
+            fecha_venta='2024-06-01'
+        )
+        response = self.client.delete(reverse('ventafibra-detail', kwargs={'uid': vf.uid}))
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertEqual(VentaFibra.objects.count(), 0)

@@ -219,6 +219,19 @@ class _ProduccionItem extends StatelessWidget {
                   style: theme.textTheme.bodySmall
                       ?.copyWith(color: Colors.grey.shade600),
                 ),
+                const SizedBox(height: 2),
+                if (produccion.diametroFibraMicras != null ||
+                    produccion.factorConfort != null ||
+                    produccion.medulacionPct != null)
+                  Text(
+                    '${produccion.diametroFibraMicras != null ? '${produccion.diametroFibraMicras!.toStringAsFixed(1)} µ' : ''}'
+                    '${produccion.diametroFibraMicras != null && (produccion.factorConfort != null || produccion.medulacionPct != null) ? ' · ' : ''}'
+                    '${produccion.factorConfort != null ? '${produccion.factorConfort!.toStringAsFixed(1)}% conf.' : ''}'
+                    '${produccion.factorConfort != null && produccion.medulacionPct != null ? ' · ' : ''}'
+                    '${produccion.medulacionPct != null ? '${produccion.medulacionPct!.toStringAsFixed(1)}% med.' : ''}',
+                    style: theme.textTheme.bodySmall
+                        ?.copyWith(color: Colors.teal.shade600),
+                  ),
               ],
             ),
           ),

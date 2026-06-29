@@ -13,10 +13,12 @@ class HomeShell extends StatelessWidget {
     int currentIndex = 0;
     if (location.startsWith('/animales')) {
       currentIndex = 1;
-    } else if (location.startsWith('/perfil')) {
+    } else if (location.startsWith('/gestion')) {
       currentIndex = 2;
-    } else if (location.startsWith('/reportes')) {
+    } else if (location.startsWith('/perfil')) {
       currentIndex = 3;
+    } else if (location.startsWith('/reportes')) {
+      currentIndex = 4;
     }
 
     return Scaffold(
@@ -34,9 +36,12 @@ class HomeShell extends StatelessWidget {
               context.go('/animales');
               break;
             case 2:
-              context.go('/perfil');
+              context.go('/gestion');
               break;
             case 3:
+              context.go('/perfil');
+              break;
+            case 4:
               context.go('/reportes');
               break;
           }
@@ -51,6 +56,11 @@ class HomeShell extends StatelessWidget {
             icon: Icon(Icons.pets),
             selectedIcon: Icon(Icons.pets, color: AppTheme.primary),
             label: 'Animales',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.apps),
+            selectedIcon: Icon(Icons.apps, color: AppTheme.primary),
+            label: 'Gestión',
           ),
           NavigationDestination(
             icon: Icon(Icons.person),

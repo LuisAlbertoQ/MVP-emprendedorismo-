@@ -11,6 +11,26 @@ class Especie(models.TextChoices):
     OVINEO = 'ovino', 'Ovino'
 
 
+class Raza(models.TextChoices):
+    HUACAYA = 'huacaya', 'Huacaya'
+    SURI = 'suri', 'Suri'
+    KARA = 'kara', "K'ara"
+    CHAQU = 'chaqu', 'Chaqu'
+    CRIOLLO = 'criollo', 'Criollo'
+    CORRIEDALE = 'corriedale', 'Corriedale'
+    JUNIN = 'junin', 'Junín'
+    HAMPSHIRE_DOWN = 'hampshire_down', 'Hampshire Down'
+    BLACK_BELLY = 'black_belly', 'Black Belly'
+    ASSAF = 'assaf', 'Assaf'
+
+
+RAZAS_POR_ESPECIE = {
+    'alpaca': ['huacaya', 'suri'],
+    'llama': ['kara', 'chaqu'],
+    'ovino': ['criollo', 'corriedale', 'junin', 'hampshire_down', 'black_belly', 'assaf'],
+}
+
+
 class Sexo(models.TextChoices):
     HEMBRA = 'hembra', 'Hembra'
     MACHO = 'macho', 'Macho'
@@ -110,6 +130,9 @@ class Produccion(models.Model):
     peso_vellon_sucio_kg = models.DecimalField(max_digits=6, decimal_places=2)
     peso_vellon_limpio_kg = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
     numero_esquila = models.PositiveIntegerField(null=True, blank=True)
+    diametro_fibra_micras = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True, verbose_name='Diámetro de fibra (micras)')
+    factor_confort = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True, verbose_name='Factor de confort (%)')
+    medulacion_pct = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True, verbose_name='Medulación (%)')
     observaciones = models.TextField(blank=True, default='')
     sync_status = models.CharField(max_length=15, choices=SyncStatus.choices, default=SyncStatus.SIC)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -136,3 +159,110 @@ class Produccion(models.Model):
 
     def __str__(self):
         return f"{self.animal.arete} - {self.fecha_esquila} - {self.peso_vellon_sucio_kg}kg"
+
+
+class ResultadoGestacion(models.TextChoices):
+    PENDIENTE = 'pendiente', 'Pendiente'
+    POSITIVO = 'positivo', 'Positivo'
+    NEGATIVO = 'negativo', 'Negativo'
+    NO_REVISADO = 'no_revisado', 'No revisado'
+
+
+class Empadre(models.Model):
+    uid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
+    hembra = models.ForeignKey(Animal, on_delete=models.CASCADE, related_name='empadres_hembra')
+    macho = models.ForeignKey(Animal, on_delete=models.CASCADE, related_name='empadres_macho')
+    usuario = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='empadres')
+    fecha_empadre = models.DateField()
+    fecha_dx_gestacion = models.DateField(null=True, blank=True)
+    resultado = models.CharField(max_length=20, choices=ResultadoGestacion.choices, default=ResultadoGestacion.PENDIENTE)
+    observaciones = models.TextField(blank=True, default='')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'empadres'
+        verbose_name = 'Empadre'
+        verbose_name_plural = 'Empadres'
+        ordering = ['-fecha_empadre']
+
+    def __str__(self):
+        return f"{self.hembra.arete} x {self.macho.arete} - {self.fecha_empadre}"
+
+
+class Parto(models.Model):
+    uid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
+    empadre = models.ForeignKey(Empadre, on_delete=models.SET_NULL, null=True, blank=True, related_name='partos')
+    hembra = models.ForeignKey(Animal, on_delete=models.CASCADE, related_name='partos')
+    usuario = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='partos')
+    fecha_parto = models.DateField()
+    fecha_probable = models.DateField(null=True, blank=True)
+    numero_crias = models.PositiveSmallIntegerField(default=1)
+    incidencias = models.TextField(blank=True, default='')
+    observaciones = models.TextField(blank=True, default='')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'partos'
+        verbose_name = 'Parto'
+        verbose_name_plural = 'Partos'
+        ordering = ['-fecha_parto']
+
+    def __str__(self):
+        return f"Parto de {self.hembra.arete} - {self.fecha_parto}"
+
+
+class TipoCosto(models.TextChoices):
+    ALIMENTACION = 'alimentacion', 'Alimentación'
+    SANIDAD = 'sanidad', 'Sanidad'
+    ESQUILA = 'esquila', 'Esquila'
+    TRANSPORTE = 'transporte', 'Transporte'
+    OTRO = 'otro', 'Otro'
+
+
+class Costo(models.Model):
+    uid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
+    animal = models.ForeignKey(Animal, on_delete=models.CASCADE, related_name='costos')
+    usuario = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='costos')
+    tipo = models.CharField(max_length=20, choices=TipoCosto.choices)
+    monto = models.DecimalField(max_digits=10, decimal_places=2)
+    fecha = models.DateField()
+    descripcion = models.TextField(blank=True, default='')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'costos'
+        verbose_name = 'Costo'
+        verbose_name_plural = 'Costos'
+        ordering = ['-fecha']
+
+    def __str__(self):
+        return f"{self.animal.arete} - {self.tipo} - S/{self.monto}"
+
+
+class VentaFibra(models.Model):
+    uid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
+    produccion = models.ForeignKey(Produccion, on_delete=models.SET_NULL, null=True, blank=True, related_name='ventas')
+    animal = models.ForeignKey(Animal, on_delete=models.CASCADE, related_name='ventas_fibra')
+    usuario = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='ventas_fibra')
+    kg_vendidos = models.DecimalField(max_digits=8, decimal_places=2)
+    precio_kg = models.DecimalField(max_digits=10, decimal_places=2)
+    comprador = models.CharField(max_length=200, blank=True, default='')
+    fecha_venta = models.DateField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'ventas_fibra'
+        verbose_name = 'Venta de fibra'
+        verbose_name_plural = 'Ventas de fibra'
+        ordering = ['-fecha_venta']
+
+    @property
+    def ingreso_total(self):
+        return round(self.kg_vendidos * self.precio_kg, 2)
+
+    def __str__(self):
+        return f"{self.animal.arete} - {self.kg_vendidos}kg x S/{self.precio_kg}"

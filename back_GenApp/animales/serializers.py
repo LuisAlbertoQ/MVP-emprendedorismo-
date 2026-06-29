@@ -1,8 +1,12 @@
 from datetime import date
 from rest_framework import serializers
 from django.db import IntegrityError
-from .models import Animal, Especie, Sexo, EstadoAnimal, Produccion
-from .utils import calcular_categoria_edad, _edad_en_meses
+from .models import (
+    Animal, Especie, Raza, Sexo, EstadoAnimal, Produccion,
+    Empadre, Parto, Costo, VentaFibra, ResultadoGestacion, TipoCosto,
+    RAZAS_POR_ESPECIE,
+)
+from .utils import calcular_categoria_edad, _edad_en_meses, calcular_coeficiente_consanguinidad, calcular_fecha_probable_parto
 
 
 class UidToAnimalField(serializers.Field):
@@ -30,6 +34,7 @@ class AnimalSerializer(serializers.ModelSerializer):
     madre = UidToAnimalField(required=False, allow_null=True)
     categoria_edad = serializers.SerializerMethodField()
     foto = serializers.SerializerMethodField()
+    raza = serializers.ChoiceField(choices=Raza.choices, required=False, allow_blank=True, default='')
 
     class Meta:
         model = Animal
@@ -98,6 +103,15 @@ class AnimalSerializer(serializers.ModelSerializer):
             if fecha_nac and madre.fecha_nacimiento >= fecha_nac:
                 raise serializers.ValidationError({'madre': 'La madre debe haber nacido antes que el animal'})
 
+        raza = data.get('raza', self.instance.raza if self.instance else '')
+        if raza:
+            valid_razas = RAZAS_POR_ESPECIE.get(especie, [])
+            if valid_razas and raza not in valid_razas:
+                valid_labels = ', '.join(dict(Raza.choices)[r] for r in valid_razas)
+                raise serializers.ValidationError({
+                    'raza': f'"{raza}" no es una raza válida para {especie}. Razas válidas: {valid_labels}'
+                })
+
         return data
 
     def validate_arete(self, value):
@@ -157,13 +171,25 @@ class SyncChangeSerializer(serializers.Serializer):
     sexo = serializers.ChoiceField(choices=Sexo.choices)
     fecha_nacimiento = serializers.DateField()
     nombre = serializers.CharField(required=False, default='', max_length=100)
-    raza = serializers.CharField(required=False, default='', max_length=50)
+    raza = serializers.ChoiceField(choices=Raza.choices, required=False, allow_blank=True, default='')
     padre_uid = serializers.UUIDField(required=False, allow_null=True)
     madre_uid = serializers.UUIDField(required=False, allow_null=True)
     observaciones = serializers.CharField(required=False, default='')
     estado = serializers.ChoiceField(choices=EstadoAnimal.choices, required=False, default='VIVO')
     action = serializers.ChoiceField(choices=['create', 'update', 'delete'], default='create')
     local_updated_at = serializers.DateTimeField(required=False, allow_null=True)
+
+    def validate(self, data):
+        raza = data.get('raza', '')
+        especie = data.get('especie')
+        if raza and especie:
+            valid_razas = RAZAS_POR_ESPECIE.get(especie, [])
+            if valid_razas and raza not in valid_razas:
+                valid_labels = ', '.join(dict(Raza.choices)[r] for r in valid_razas)
+                raise serializers.ValidationError({
+                    'raza': f'"{raza}" no es una raza válida para {especie}. Razas válidas: {valid_labels}'
+                })
+        return data
 
 
 class SyncProduccionChangeSerializer(serializers.Serializer):
@@ -173,6 +199,9 @@ class SyncProduccionChangeSerializer(serializers.Serializer):
     peso_vellon_sucio_kg = serializers.DecimalField(max_digits=6, decimal_places=2)
     peso_vellon_limpio_kg = serializers.DecimalField(max_digits=6, decimal_places=2, required=False, allow_null=True)
     numero_esquila = serializers.IntegerField(required=False, allow_null=True)
+    diametro_fibra_micras = serializers.DecimalField(max_digits=5, decimal_places=2, required=False, allow_null=True)
+    factor_confort = serializers.DecimalField(max_digits=5, decimal_places=2, required=False, allow_null=True)
+    medulacion_pct = serializers.DecimalField(max_digits=5, decimal_places=2, required=False, allow_null=True)
     observaciones = serializers.CharField(required=False, default='')
     action = serializers.ChoiceField(choices=['create', 'update', 'delete'], default='create')
     local_updated_at = serializers.DateTimeField(required=False, allow_null=True)
@@ -221,6 +250,7 @@ class SyncOutputProduccionSerializer(serializers.ModelSerializer):
         fields = [
             'uid', 'animal_uid', 'fecha_esquila', 'peso_vellon_sucio_kg',
             'peso_vellon_limpio_kg', 'numero_esquila',
+            'diametro_fibra_micras', 'factor_confort', 'medulacion_pct',
             'rendimiento_pct', 'observaciones', 'sync_status',
             'updated_at'
         ]
@@ -255,6 +285,7 @@ class ProduccionSerializer(serializers.ModelSerializer):
         fields = [
             'uid', 'animal_uid', 'fecha_esquila', 'peso_vellon_sucio_kg',
             'peso_vellon_limpio_kg', 'numero_esquila',
+            'diametro_fibra_micras', 'factor_confort', 'medulacion_pct',
             'rendimiento_pct', 'observaciones', 'sync_status',
             'created_at', 'updated_at'
         ]
@@ -322,6 +353,329 @@ class ProduccionSerializer(serializers.ModelSerializer):
                     })
 
         return data
+
+
+class ConsanguinidadSerializer(serializers.ModelSerializer):
+    coeficiente = serializers.SerializerMethodField()
+    categoria_edad = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Animal
+        fields = ['uid', 'arete', 'nombre', 'especie', 'sexo', 'fecha_nacimiento', 'categoria_edad', 'coeficiente']
+
+    def get_coeficiente(self, obj):
+        return calcular_coeficiente_consanguinidad(obj)
+
+    def get_categoria_edad(self, obj):
+        return calcular_categoria_edad(obj.especie, obj.fecha_nacimiento)
+
+
+class EmpadreListSerializer(serializers.ModelSerializer):
+    hembra_arete = serializers.CharField(source='hembra.arete', read_only=True)
+    macho_arete = serializers.CharField(source='macho.arete', read_only=True)
+    fecha_probable_parto = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Empadre
+        fields = '__all__'
+
+    def get_fecha_probable_parto(self, obj):
+        if not obj.fecha_empadre:
+            return None
+        return calcular_fecha_probable_parto(obj.hembra.especie, obj.fecha_empadre)
+
+
+class EmpadreSerializer(serializers.ModelSerializer):
+    hembra_uid = serializers.UUIDField(source='hembra.uid', read_only=True)
+    macho_uid = serializers.UUIDField(source='macho.uid', read_only=True)
+    hembra_write_uid = serializers.UUIDField(write_only=True, required=False)
+    macho_write_uid = serializers.UUIDField(write_only=True, required=False)
+    hembra_arete = serializers.CharField(source='hembra.arete', read_only=True)
+    macho_arete = serializers.CharField(source='macho.arete', read_only=True)
+    hembra_nombre = serializers.CharField(source='hembra.nombre', read_only=True, default='')
+    macho_nombre = serializers.CharField(source='macho.nombre', read_only=True, default='')
+    hembra_especie = serializers.CharField(source='hembra.especie', read_only=True)
+    macho_especie = serializers.CharField(source='macho.especie', read_only=True)
+    fecha_probable_parto = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Empadre
+        fields = [
+            'uid', 'hembra', 'hembra_uid', 'macho', 'macho_uid',
+            'hembra_write_uid', 'macho_write_uid',
+            'hembra_arete', 'macho_arete', 'hembra_nombre', 'macho_nombre',
+            'hembra_especie', 'macho_especie',
+            'usuario', 'fecha_empadre', 'fecha_dx_gestacion',
+            'resultado', 'fecha_probable_parto', 'observaciones',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = [
+            'uid', 'hembra', 'macho', 'hembra_uid', 'macho_uid',
+            'hembra_arete', 'macho_arete', 'hembra_nombre', 'macho_nombre',
+            'hembra_especie', 'macho_especie',
+            'usuario', 'fecha_probable_parto', 'created_at', 'updated_at'
+        ]
+
+    def get_fecha_probable_parto(self, obj):
+        if not obj.fecha_empadre:
+            return None
+        return calcular_fecha_probable_parto(obj.hembra.especie, obj.fecha_empadre)
+
+    def validate_hembra_write_uid(self, value):
+        try:
+            animal = Animal.objects.get(uid=value)
+        except Animal.DoesNotExist:
+            raise serializers.ValidationError('Hembra no encontrada')
+        if animal.sexo != 'hembra':
+            raise serializers.ValidationError('Debe ser una hembra')
+        return value
+
+    def validate_macho_write_uid(self, value):
+        try:
+            animal = Animal.objects.get(uid=value)
+        except Animal.DoesNotExist:
+            raise serializers.ValidationError('Macho no encontrado')
+        if animal.sexo != 'macho':
+            raise serializers.ValidationError('Debe ser un macho')
+        return value
+
+    def validate_fecha_empadre(self, value):
+        if value > date.today():
+            raise serializers.ValidationError('La fecha de empadre no puede ser futura')
+        return value
+
+    def validate(self, data):
+        hembra_write_uid = data.get('hembra_write_uid')
+        macho_write_uid = data.get('macho_write_uid')
+        if hembra_write_uid and macho_write_uid:
+            if hembra_write_uid == macho_write_uid:
+                raise serializers.ValidationError('La hembra y el macho no pueden ser el mismo animal')
+            try:
+                hembra = Animal.objects.get(uid=hembra_write_uid)
+                macho = Animal.objects.get(uid=macho_write_uid)
+            except Animal.DoesNotExist:
+                raise serializers.ValidationError('Animal no encontrado')
+            if hembra.especie != macho.especie:
+                raise serializers.ValidationError(
+                    f'La hembra ({hembra.get_especie_display()}) y el macho '
+                    f'({macho.get_especie_display()}) deben ser de la misma especie'
+                )
+            if hembra.sexo != 'hembra':
+                raise serializers.ValidationError(
+                    {'hembra_write_uid': 'El animal seleccionado como hembra debe ser de sexo hembra'}
+                )
+            if macho.sexo != 'macho':
+                raise serializers.ValidationError(
+                    {'macho_write_uid': 'El animal seleccionado como macho debe ser de sexo macho'}
+                )
+            activo = Empadre.objects.filter(
+                hembra=hembra,
+                resultado__in=['pendiente', 'positivo'],
+            ).exclude(uid=self.instance.uid if self.instance else None).first()
+            if activo:
+                raise serializers.ValidationError(
+                    f'La hembra ya tiene un empadre {activo.get_resultado_display()} '
+                    f'del {activo.fecha_empadre}'
+                )
+        return data
+
+    def create(self, validated_data):
+        hembra = Animal.objects.get(uid=validated_data.pop('hembra_write_uid'))
+        macho = Animal.objects.get(uid=validated_data.pop('macho_write_uid'))
+        return Empadre.objects.create(
+            hembra=hembra,
+            macho=macho,
+            **validated_data
+        )
+
+
+class PartoListSerializer(serializers.ModelSerializer):
+    hembra_arete = serializers.CharField(source='hembra.arete', read_only=True)
+
+    class Meta:
+        model = Parto
+        fields = '__all__'
+
+
+class PartoSerializer(serializers.ModelSerializer):
+    hembra_write_uid = serializers.UUIDField(write_only=True)
+    empadre_write_uid = serializers.UUIDField(write_only=True, required=False, allow_null=True)
+    hembra_uid = serializers.UUIDField(source='hembra.uid', read_only=True)
+    empadre_uid = serializers.UUIDField(source='empadre.uid', read_only=True, allow_null=True)
+    hembra_arete = serializers.CharField(source='hembra.arete', read_only=True)
+    hembra_nombre = serializers.CharField(source='hembra.nombre', read_only=True, default='')
+    hembra_especie = serializers.CharField(source='hembra.especie', read_only=True)
+
+    class Meta:
+        model = Parto
+        fields = [
+            'uid', 'hembra', 'hembra_uid', 'hembra_write_uid',
+            'empadre', 'empadre_uid', 'empadre_write_uid',
+            'hembra_arete', 'hembra_nombre', 'hembra_especie',
+            'usuario', 'fecha_parto', 'fecha_probable',
+            'numero_crias', 'incidencias', 'observaciones',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = [
+            'uid', 'hembra', 'hembra_uid', 'empadre', 'empadre_uid',
+            'hembra_arete', 'hembra_nombre', 'hembra_especie',
+            'usuario', 'created_at', 'updated_at'
+        ]
+
+    def validate_hembra_write_uid(self, value):
+        try:
+            animal = Animal.objects.get(uid=value)
+        except Animal.DoesNotExist:
+            raise serializers.ValidationError('Hembra no encontrada')
+        if animal.sexo != 'hembra':
+            raise serializers.ValidationError('Debe ser una hembra')
+        return value
+
+    def validate_fecha_parto(self, value):
+        if value > date.today():
+            raise serializers.ValidationError('La fecha de parto no puede ser futura')
+        return value
+
+    def validate(self, data):
+        hembra_write_uid = data.get('hembra_write_uid')
+        empadre_write_uid = data.get('empadre_write_uid')
+        if empadre_write_uid and hembra_write_uid:
+            try:
+                empadre = Empadre.objects.get(uid=empadre_write_uid)
+            except Empadre.DoesNotExist:
+                raise serializers.ValidationError('Empadre no encontrado')
+            if str(empadre.hembra.uid) != str(hembra_write_uid):
+                hembra = Animal.objects.get(uid=hembra_write_uid)
+                raise serializers.ValidationError(
+                    f'El empadre seleccionado corresponde a la hembra '
+                    f'{empadre.hembra.arete}, no a {hembra.arete}'
+                )
+        return data
+
+    def create(self, validated_data):
+        hembra = Animal.objects.get(uid=validated_data.pop('hembra_write_uid'))
+        empadre_write_uid = validated_data.pop('empadre_write_uid', None)
+        empadre = Empadre.objects.get(uid=empadre_write_uid) if empadre_write_uid else None
+        return Parto.objects.create(
+            hembra=hembra,
+            empadre=empadre,
+            **validated_data
+        )
+
+
+class CostoListSerializer(serializers.ModelSerializer):
+    animal_arete = serializers.CharField(source='animal.arete', read_only=True)
+
+    class Meta:
+        model = Costo
+        fields = '__all__'
+
+
+class CostoSerializer(serializers.ModelSerializer):
+    animal_write_uid = serializers.UUIDField(write_only=True)
+    animal_uid = serializers.UUIDField(source='animal.uid', read_only=True)
+    animal_arete = serializers.CharField(source='animal.arete', read_only=True)
+    animal_nombre = serializers.CharField(source='animal.nombre', read_only=True, default='')
+    animal_especie = serializers.CharField(source='animal.especie', read_only=True)
+
+    class Meta:
+        model = Costo
+        fields = [
+            'uid', 'animal', 'animal_uid', 'animal_write_uid',
+            'animal_arete', 'animal_nombre', 'animal_especie',
+            'usuario', 'tipo', 'monto', 'fecha', 'descripcion',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = [
+            'uid', 'animal', 'animal_uid', 'animal_arete',
+            'animal_nombre', 'animal_especie',
+            'usuario', 'created_at', 'updated_at'
+        ]
+
+    def validate_animal_write_uid(self, value):
+        try:
+            Animal.objects.get(uid=value)
+        except Animal.DoesNotExist:
+            raise serializers.ValidationError('Animal no encontrado')
+        return value
+
+    def validate_fecha(self, value):
+        if value > date.today():
+            raise serializers.ValidationError('La fecha no puede ser futura')
+        return value
+
+    def create(self, validated_data):
+        animal = Animal.objects.get(uid=validated_data.pop('animal_write_uid'))
+        return Costo.objects.create(animal=animal, **validated_data)
+
+
+class VentaFibraListSerializer(serializers.ModelSerializer):
+    animal_arete = serializers.CharField(source='animal.arete', read_only=True)
+    ingreso_total = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
+
+    class Meta:
+        model = VentaFibra
+        fields = '__all__'
+
+
+class VentaFibraSerializer(serializers.ModelSerializer):
+    animal_write_uid = serializers.UUIDField(write_only=True)
+    produccion_write_uid = serializers.UUIDField(write_only=True, required=False, allow_null=True)
+    animal_uid = serializers.UUIDField(source='animal.uid', read_only=True)
+    produccion_uid = serializers.UUIDField(source='produccion.uid', read_only=True, allow_null=True)
+    animal_arete = serializers.CharField(source='animal.arete', read_only=True)
+    animal_nombre = serializers.CharField(source='animal.nombre', read_only=True, default='')
+    animal_especie = serializers.CharField(source='animal.especie', read_only=True)
+
+    class Meta:
+        model = VentaFibra
+        fields = [
+            'uid', 'produccion', 'produccion_uid', 'produccion_write_uid',
+            'animal', 'animal_uid', 'animal_write_uid',
+            'animal_arete', 'animal_nombre', 'animal_especie',
+            'usuario', 'kg_vendidos', 'precio_kg', 'comprador',
+            'fecha_venta', 'created_at', 'updated_at'
+        ]
+        read_only_fields = [
+            'uid', 'produccion', 'produccion_uid', 'animal', 'animal_uid',
+            'animal_arete', 'animal_nombre', 'animal_especie',
+            'usuario', 'created_at', 'updated_at'
+        ]
+
+    def validate_animal_write_uid(self, value):
+        try:
+            Animal.objects.get(uid=value)
+        except Animal.DoesNotExist:
+            raise serializers.ValidationError('Animal no encontrado')
+        return value
+
+    def validate_fecha_venta(self, value):
+        if value > date.today():
+            raise serializers.ValidationError('La fecha de venta no puede ser futura')
+        return value
+
+    def create(self, validated_data):
+        animal = Animal.objects.get(uid=validated_data.pop('animal_write_uid'))
+        produccion_write_uid = validated_data.pop('produccion_write_uid', None)
+        produccion = Produccion.objects.filter(uid=produccion_write_uid).first() if produccion_write_uid else None
+        return VentaFibra.objects.create(animal=animal, produccion=produccion, **validated_data)
+
+
+class RankingFibraSerializer(serializers.ModelSerializer):
+    rendimiento_pct = serializers.SerializerMethodField()
+    categoria_edad = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Animal
+        fields = ['uid', 'arete', 'nombre', 'especie', 'categoria_edad',
+                  'diametro_fibra_micras', 'factor_confort', 'medulacion_pct',
+                  'rendimiento_pct']
+
+    def get_rendimiento_pct(self, obj):
+        return obj.rendimiento_pct
+
+    def get_categoria_edad(self, obj):
+        return calcular_categoria_edad(obj.especie, obj.fecha_nacimiento)
 
 
 class ReporteSerializer(serializers.Serializer):

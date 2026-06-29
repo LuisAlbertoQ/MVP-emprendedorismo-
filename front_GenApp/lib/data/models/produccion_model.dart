@@ -5,6 +5,9 @@ class ProduccionModel {
   final double pesoVellonSucioKg;
   final double? pesoVellonLimpioKg;
   final int? numeroEsquila;
+  final double? diametroFibraMicras;
+  final double? factorConfort;
+  final double? medulacionPct;
   final String observaciones;
   final String syncStatus;
   final DateTime? createdAt;
@@ -17,6 +20,9 @@ class ProduccionModel {
     required this.pesoVellonSucioKg,
     this.pesoVellonLimpioKg,
     this.numeroEsquila,
+    this.diametroFibraMicras,
+    this.factorConfort,
+    this.medulacionPct,
     this.observaciones = '',
     this.syncStatus = 'sincronizado',
     this.createdAt,
@@ -46,6 +52,15 @@ class ProduccionModel {
           ? double.tryParse(json['peso_vellon_limpio_kg'].toString())
           : null,
       numeroEsquila: json['numero_esquila'] as int?,
+      diametroFibraMicras: json['diametro_fibra_micras'] != null
+          ? double.tryParse(json['diametro_fibra_micras'].toString())
+          : null,
+      factorConfort: json['factor_confort'] != null
+          ? double.tryParse(json['factor_confort'].toString())
+          : null,
+      medulacionPct: json['medulacion_pct'] != null
+          ? double.tryParse(json['medulacion_pct'].toString())
+          : null,
       observaciones: json['observaciones'] as String? ?? '',
       syncStatus: json['sync_status'] as String? ?? 'sincronizado',
       createdAt: parseDate(json['created_at']),
@@ -60,6 +75,9 @@ class ProduccionModel {
       'peso_vellon_sucio_kg': pesoVellonSucioKg,
       'peso_vellon_limpio_kg': pesoVellonLimpioKg,
       'numero_esquila': numeroEsquila,
+      'diametro_fibra_micras': diametroFibraMicras,
+      'factor_confort': factorConfort,
+      'medulacion_pct': medulacionPct,
       'observaciones': observaciones,
     };
   }
@@ -71,6 +89,9 @@ class ProduccionModel {
     double? pesoVellonSucioKg,
     double? pesoVellonLimpioKg,
     int? numeroEsquila,
+    double? diametroFibraMicras,
+    double? factorConfort,
+    double? medulacionPct,
     String? observaciones,
     String? syncStatus,
   }) {
@@ -81,6 +102,9 @@ class ProduccionModel {
       pesoVellonSucioKg: pesoVellonSucioKg ?? this.pesoVellonSucioKg,
       pesoVellonLimpioKg: pesoVellonLimpioKg ?? this.pesoVellonLimpioKg,
       numeroEsquila: numeroEsquila ?? this.numeroEsquila,
+      diametroFibraMicras: diametroFibraMicras ?? this.diametroFibraMicras,
+      factorConfort: factorConfort ?? this.factorConfort,
+      medulacionPct: medulacionPct ?? this.medulacionPct,
       observaciones: observaciones ?? this.observaciones,
       syncStatus: syncStatus ?? this.syncStatus,
       createdAt: createdAt,
@@ -96,6 +120,9 @@ class ProduccionModel {
       'peso_vellon_sucio_kg': pesoVellonSucioKg,
       'peso_vellon_limpio_kg': pesoVellonLimpioKg,
       'numero_esquila': numeroEsquila,
+      'diametro_fibra_micras': diametroFibraMicras,
+      'factor_confort': factorConfort,
+      'medulacion_pct': medulacionPct,
       'observaciones': observaciones,
       'action': action,
     };
