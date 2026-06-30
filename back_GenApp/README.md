@@ -1,50 +1,40 @@
-# GeneApp Andina - Backend
+# GeneApp Andina — Backend
 
-API REST para gestión de criadores de alpacas, llamas y ovinos en la región andina. Incluye clasificación etaria automática, validación parental por edad real e historial productivo de esquilas.
+API REST para gestión de criadores de alpacas, llamas y ovinos. Cubre registro genealógico, control reproductivo (empadres/partos), gestión financiera (costos/ventas de fibra), producción (esquilas) y reportes.
 
 ## Tecnologías
 
-- **Python 3.12+**
-- **Django 4.2 LTS**
-- **Django REST Framework 3.14+**
-- **MySQL 8.0+** (Laragon)
-- **SimpleJWT** - Autenticación por tokens
-- **drf-spectacular** - Documentación OpenAPI
-- **ReportLab** - Generación de PDF
-- **Pillow** - Manejo de imágenes
+- **Python 3.13** / **Django 4.2 LTS**
+- **Django REST Framework 3.14** — API REST
+- **MySQL 8.0+** — Base de datos
+- **SimpleJWT** — Autenticación por tokens
+- **Gunicorn** — Servidor WSGI para producción
+- **Whitenoise** — Servir archivos estáticos
+- **drf-spectacular** — Documentación OpenAPI
+- **ReportLab** — Generación de PDF
+- **Pillow** — Manejo de imágenes
 
-## Requisitos
+## Requisitos (desarrollo local)
 
-- Python 3.12+
-- MySQL 8.0+ (Laragon)
-- Entorno virtual (venv) - ya creado en `env/`
+- Python 3.13+
+- MySQL 8.0+
+- Entorno virtual en `env/`
 
-## Instalación
-
-### 1. Activar entorno virtual
+## Instalación local
 
 ```bash
 cd back_GenApp
 .\env\Scripts\python.exe -m pip install -r requirements.txt
 ```
 
-> Si la ejecución de scripts está deshabilitada, usa directamente el Python del venv:
-> `.\env\Scripts\python.exe manage.py <comando>`
-
-### 2. Configurar base de datos
-
-Crear la base de datos en Laragon (MySQL):
-
+Crear base de datos:
 ```sql
 CREATE DATABASE geneapp CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 ```
 
-### 3. Variables de entorno
-
-Editar `.env` en la raíz del proyecto:
-
+Editar `.env`:
 ```env
-SECRET_KEY=tu-clave-secreta-aqui
+SECRET_KEY=tu-clave-secreta
 DEBUG=True
 DB_NAME=geneapp
 DB_USER=root
@@ -55,364 +45,335 @@ ALLOWED_HOSTS=localhost,127.0.0.1
 CORS_ALLOWED_ORIGINS=http://localhost:8000,http://127.0.0.1:8000
 ```
 
-### 4. Migraciones
-
+Migrar e iniciar:
 ```bash
 .\env\Scripts\python.exe manage.py migrate
-```
-
-### 5. Iniciar servidor
-
-```bash
 .\env\Scripts\python.exe manage.py runserver
 ```
 
-Servidor disponible en: `http://localhost:8000`
+Servidor en `http://localhost:8000`. Swagger en `http://localhost:8000/api/docs/`.
 
-### 6. Correr tests
+## Despliegue con Docker (EC2 / producción)
 
 ```bash
-.\env\Scripts\python.exe manage.py test
+# Clonar y entrar
+cd back_GenApp
+
+# Crear .env
+cat > .env << EOF
+SECRET_KEY=<python -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())">
+DEBUG=False
+DB_NAME=geneapp
+DB_USER=root
+DB_PASSWORD=<contraseña_segura>
+DB_HOST=db
+DB_PORT=3306
+ALLOWED_HOSTS=localhost,127.0.0.1,<IP_PUBLICA_EC2>
+MYSQL_ROOT_PASSWORD=<contraseña_segura>
+EOF
+
+# Iniciar
+docker compose up -d --build
+
+# Ver logs
+docker compose logs -f
+
+# Verificar
+curl http://localhost:8000/api/v1/
 ```
 
-Servidor disponible en: `http://localhost:8000`
+La API queda en `http://<IP_EC2>:8000/api/v1/`. Para HTTPS, agregar Nginx como proxy reverso + Let's Encrypt.
+
+### Archivos de despliegue
+
+| Archivo | Propósito |
+|---------|-----------|
+| `Dockerfile` | Imagen Python 3.13-slim con dependencias |
+| `docker-compose.yml` | MySQL 8.0 + backend con healthcheck |
+| `entrypoint.sh` | Espera MySQL, corre migraciones, collectstatic, arranca Gunicorn |
+| `.dockerignore` | Excluye env, media, __pycache__ |
 
 ## Endpoints de la API
 
-### Autenticación (prefix: `/api/v1/auth/`)
-
-| Método | Endpoint | Descripción | Planes |
-|--------|----------|-------------|--------|
-| POST | `register/` | Registro (teléfono, nombre, password) | Todos |
-| POST | `login/` | Login (teléfono, password) → access + refresh | Todos |
-| POST | `refresh/` | Refrescar token JWT | Todos |
-| GET | `perfil/` | Perfil + plan + animales usados | Todos |
-| POST | `cambiar-plan/` | Cambiar plan (basico/criador) | Todos |
-| POST | `webhook-yape/` | Webhook para pagos Yape (stub) | Todos |
-
-### Animales (prefix: `/api/v1/animales/`)
-
-| Método | Endpoint | Descripción | Planes |
-|--------|----------|-------------|--------|
-| GET | `/` | Listar (paginado, ?especie=&sexo=&estado=&search=) — incluye `categoria_edad`, `foto` y `estado` | Todos |
-| POST | `/` | Crear animal | Todos (limite) |
-| GET | `/{uid}/` | Detalle — incluye `categoria_edad` y `foto` (URL absoluta) | Todos |
-| PUT | `/{uid}/` | Actualizar (completo) | Todos |
-| PATCH | `/{uid}/` | Actualizar (parcial, incl. foto multipart) | Todos |
-| DELETE | `/{uid}/` | Eliminar (soft delete) | Todos |
-| GET | `/{uid}/arbol/` | Árbol genealógico (2-3 gen) — incluye `categoria_edad` por nodo | Todos |
-| GET | `/{uid}/producciones/` | **Listar esquilas** del animal (orden descendente por fecha) | Todos |
-| POST | `/{uid}/producciones/` | **Crear esquila** para el animal | Todos |
-| GET | `/candidatos/` | Lista para selector de padres — incluye `categoria_edad`, acepta `?especie=` | Todos |
-| GET | `/resumen/` | Stats (total, machos, hembras, especies) | Todos |
-
-### Producciones (prefix: `/api/v1/producciones/`)
+### Autenticación (`/api/v1/auth/`)
 
 | Método | Endpoint | Descripción |
 |--------|----------|-------------|
-| GET | `/{uid}/` | Detalle de una esquila (incluye `animal_uid`) |
-| PUT | `/{uid}/` | Actualizar esquila (completo) |
-| PATCH | `/{uid}/` | Actualizar esquila (parcial) |
-| DELETE | `/{uid}/` | Eliminar esquila (físico) |
+| POST | `register/` | Registro (teléfono, nombre, password) |
+| POST | `login/` | Login → access + refresh tokens |
+| POST | `refresh/` | Refrescar token |
+| GET | `perfil/` | Perfil + plan + animales usados |
+| POST | `cambiar-plan/` | Cambiar plan (basico/criador) |
+| POST | `webhook-yape/` | Webhook pagos Yape (stub) |
 
-### Sincronización (prefix: `/api/v1/`)
+### Animales (`/api/v1/animales/`)
 
 | Método | Endpoint | Descripción |
 |--------|----------|-------------|
-| POST | `sync/` | Sincronización offline — envía y recibe cambios de **animales** y **producciones** (incluye `categoria_edad` y `produccion_changes`) |
+| GET | `/` | Listar (paginado, ?especie=&sexo=&estado=&search=) |
+| POST | `/` | Crear animal (con límite por plan) |
+| GET | `/{uid}/` | Detalle con categoría_edad |
+| PATCH | `/{uid}/` | Actualizar parcial (incl. foto multipart) |
+| DELETE | `/{uid}/` | Soft delete (estado=VENDIDO) |
+| GET | `/{uid}/arbol/` | Árbol genealógico (2-3 gen) |
+| GET | `/{uid}/producciones/` | Listar esquilas del animal |
+| POST | `/{uid}/producciones/` | Crear esquila |
+| GET | `/{uid}/consanguinidad/{otro_uid}/` | Coeficiente de consanguinidad |
+| GET | `/candidatos/` | Lista para selectores (?especie=&include_uids=) |
+| GET | `/razas-por-especie/` | Mapa de especies → razas válidas |
+| GET | `/resumen/` | Stats (total, machos, hembras, especies) |
 
-### Reportes (prefix: `/api/v1/reporte/`)
+### Empadres (`/api/v1/empadres/`)
 
-| Método | Endpoint | Descripción | Planes |
-|--------|----------|-------------|--------|
-| GET | `animales/?format=csv` | Descargar CSV de animales (incluye columna **Total Esquilas**) | Básico/Criador |
-| GET | `animales/?format=pdf` | Descargar PDF de animales (diseño profesional, landscape) | Básico/Criador |
-| GET | `esquilas/?format=csv` | **Descargar CSV de esquilas** (arete, animal, especie, fecha, peso, rendimiento) | Básico/Criador |
-| GET | `esquilas/?format=pdf` | **Descargar PDF de esquilas** (diseño profesional, landscape) | Básico/Criador |
+| Método | Endpoint | Descripción |
+|--------|----------|-------------|
+| GET | `/` | Listar (?hembra_uid=&resultado=) |
+| POST | `/` | Crear empadre |
+| GET | `/{uid}/` | Detalle con hembra/macho display fields |
+| PATCH | `/{uid}/` | Actualizar |
+| DELETE | `/{uid}/` | Eliminar |
+
+### Partos (`/api/v1/partos/`)
+
+| Método | Endpoint | Descripción |
+|--------|----------|-------------|
+| GET | `/` | Listar |
+| POST | `/` | Crear parto (opcional: vinculado a empadre) |
+| GET | `/{uid}/` | Detalle con hembra display fields |
+| PATCH | `/{uid}/` | Actualizar |
+| DELETE | `/{uid}/` | Eliminar |
+
+### Costos (`/api/v1/costos/`)
+
+| Método | Endpoint | Descripción |
+|--------|----------|-------------|
+| GET | `/` | Listar |
+| POST | `/` | Crear costo |
+| GET | `/{uid}/` | Detalle con animal display fields |
+| PATCH | `/{uid}/` | Actualizar |
+| DELETE | `/{uid}/` | Eliminar |
+
+### Ventas de Fibra (`/api/v1/ventas-fibra/`)
+
+| Método | Endpoint | Descripción |
+|--------|----------|-------------|
+| GET | `/` | Listar (incluye ingreso_total) |
+| POST | `/` | Crear venta |
+| GET | `/{uid}/` | Detalle con animal display fields |
+| PATCH | `/{uid}/` | Actualizar |
+| DELETE | `/{uid}/` | Eliminar |
+
+### Producciones (`/api/v1/producciones/`)
+
+| Método | Endpoint | Descripción |
+|--------|----------|-------------|
+| GET | `/{uid}/` | Detalle esquila |
+| PATCH | `/{uid}/` | Actualizar |
+| DELETE | `/{uid}/` | Eliminar físico |
+
+### Reportes (`/api/v1/reporte/`)
+
+| Método | Endpoint | Descripción | Plan |
+|--------|----------|-------------|------|
+| GET | `animales/?format=csv` | CSV de animales | Básico+ |
+| GET | `animales/?format=pdf` | PDF de animales | Criador |
+| GET | `esquilas/?format=csv` | CSV de esquilas | Básico+ |
+| GET | `esquilas/?format=pdf` | PDF de esquilas | Criador |
+
+### Sincronización (`/api/v1/`)
+
+| Método | Endpoint | Descripción |
+|--------|----------|-------------|
+| POST | `sync/` | Sync offline (animales + producciones) |
+
+### Ranking / Fibra (`/api/v1/`)
+
+| Método | Endpoint | Descripción |
+|--------|----------|-------------|
+| GET | `ranking-fibra/` | Ranking por diámetro, confort, medulación |
 
 ### Documentación
 
 | Endpoint | Descripción |
 |----------|-------------|
-| `/api/schema/` | Schema OpenAPI (JSON) |
+| `/api/schema/` | Schema OpenAPI |
 | `/api/docs/` | Swagger UI |
-
-## Estado de Implementación
-
-| Funcionalidad | Estado |
-|---------------|--------|
-| Registro y login JWT | ✅ Completo |
-| Perfil de usuario | ✅ Completo |
-| Planes (Gratuito/Básico/Criador) | ✅ Completo |
-| CRUD de animales | ✅ Completo |
-| Estado (VIVO/VENDIDO/MUERTO + motivo + fecha) | ✅ Completo |
-| Peso al nacer (peso_nacimiento_kg) | ✅ Completo |
-| Validación padre/madre (especie, sexo, fecha nacimiento) | ✅ Completo |
-| Categoría de edad automática (cría/tui_menor/tui_mayor/borrego/adulto) | ✅ Completo |
-| Límite de animales por plan (también en reactivación) | ✅ Completo |
-| Árbol genealógico (2-3 gen, con estado) | ✅ Completo |
-| CRUD de producciones (sucio/limpio/número esquila) | ✅ Completo |
-| Rendimiento calculado en vivo (no almacenado) | ✅ Completo |
-| Unique constraint (animal, numero_esquila) | ✅ Completo |
-| Validaciones: peso limpio ≤ sucio, fecha ≥ nacimiento | ✅ Completo |
-| Validaciones: peso nacimiento > 0, numero_esquila > 0 | ✅ Completo |
-| Validaciones Sync: límite animales, sexo padres | ✅ Completo |
-| Sincronización offline de producciones | ✅ Completo |
-| Reporte de esquilas CSV/PDF | ✅ Completo |
-| Total esquilas en reportes CSV/PDF | ✅ Completo |
-| Foto con URL absoluta (visible en app) | ✅ Completo |
-| PDF con diseño profesional | ✅ Completo |
-| Reportes CSV/PDF | ✅ Completo |
-| Sincronización offline | ✅ Completo |
-| Búsqueda por arete/nombre | ✅ Completo |
-| Filtros (especie, sexo, estado, search) | ✅ Completo |
-| Candidatos con categoría de edad y filtro especie | ✅ Completo |
-| Soft delete (vía estado=VENDIDO) | ✅ Completo |
-| Webhook Yape | ⚠️ Stub básico |
-| Notificaciones push | ❌ Futura versión |
-| Exportación PDF/CSV | ✅ CSV y PDF |
 
 ## Modelos de Datos
 
 ### Usuario
-- `telefono` - Identificador único (login)
-- `plan` - Gratuito / Básico / Criador
-- `first_name` - Nombre completo
-- `limite_animales` - Propiedad calculada según plan
-- `animales_count` - Propiedad calculada
+- `telefono` — Identificador único (login)
+- `plan` — Gratuito / Básico / Criador
+- `limite_animales` / `animales_count` — Propiedades calculadas
 
 ### Animal
-- `uid` - UUID único (identificador para API)
-- `arete` - Código único por usuario (max 50 chars)
-- `especie` - alpaca / llama / ovino
-- `sexo` - hembra / macho
-- `fecha_nacimiento` - Fecha de nacimiento (usada para calcular categoría de edad)
-- `nombre` - Opcional (max 100 chars)
-- `raza` - Opcional (max 50 chars)
-- `padre` / `madre` - Relaciones autopreferenciales
-- `foto` - Imagen del animal (ImageField)
-- `estado` - VIVO / VENDIDO / MUERTO (reemplaza `activo`)
-- `fecha_estado` - Fecha del último cambio de estado (autoasignada)
-- `motivo_estado` - Motivo opcional del cambio (requerido si estado ≠ VIVO)
-- `peso_nacimiento_kg` - Peso al nacer (Decimal, nullable, > 0)
-- `sync_status` - sincronizado / pendiente / error
-- `created_at` / `updated_at`
+- `uid` (UUID), `arete` (único por usuario), `nombre`, `especie` (alpaca/llama/ovino), `sexo`, `raza`, `fecha_nacimiento`
+- `padre` / `madre` — Self-referential FK
+- `foto`, `estado` (VIVO/VENDIDO/MUERTO), `fecha_estado`, `motivo_estado`
+- `peso_nacimiento_kg`, `sync_status`
 
-### Produccion (historial de esquilas)
-- `uid` - UUID único para sincronización offline
-- `animal` - FK a Animal (relación 1 a N)
-- `fecha_esquila` - Fecha de la esquila (DateField, no futura, ≥ fecha_nacimiento del animal)
-- `peso_vellon_sucio_kg` - Peso del vellón sucio en kg (Decimal, > 0) — renombrado de `peso_vellon_kg`
-- `peso_vellon_limpio_kg` - Peso del vellón limpio en kg (Decimal, nullable, ≤ peso sucio)
-- `numero_esquila` - Número de esquila (Integer, nullable, > 0, único por animal)
-- `rendimiento_pct` - **Calculado en vivo**: `(vellón_limpio / vellón_sucio) × 100` — no se almacena en BD
-- `observaciones` - Texto libre (TextField)
-- `sync_status` - sincronizado / pendiente / error
-- `created_at` / `updated_at`
-- Unique constraint: `(animal, numero_esquila)` — no permite esquilas duplicadas
-- Índice compuesto en `(animal, fecha_esquila)` para consultas rápidas
-- **No tiene soft delete** — se elimina físicamente
+### Produccion (esquilas)
+- `uid` (UUID), `animal` (FK), `fecha_esquila`, `peso_vellon_sucio_kg`, `peso_vellon_limpio_kg`
+- `numero_esquila` (único por animal), `rendimiento_pct` (calculado en vivo), `observaciones`
+- `sync_status`
+
+### Empadre
+- `uid` (UUID), `hembra` (FK Animal), `macho` (FK Animal), `usuario` (FK)
+- `fecha_empadre`, `fecha_dx_gestacion`, `resultado` (pendiente/positivo/negativo/no_revisado), `observaciones`
+- `fecha_probable_parto` (propiedad calculada según especie)
+
+### Parto
+- `uid` (UUID), `hembra` (FK Animal), `empadre` (FK nullable), `usuario` (FK)
+- `fecha_parto`, `fecha_probable`, `numero_crias`, `incidencias`, `observaciones`
+
+### Costo
+- `uid` (UUID), `animal` (FK), `usuario` (FK)
+- `tipo` (alimentacion/sanidad/esquila/transporte/otro), `monto`, `fecha`, `descripcion`
+
+### VentaFibra
+- `uid` (UUID), `animal` (FK), `produccion` (FK nullable), `usuario` (FK)
+- `kg_vendidos`, `precio_kg`, `comprador`, `fecha_venta`
+- `ingreso_total` (propiedad calculada: kg × precio)
 
 ### Categoría de Edad (calculada, no almacenada)
-La categoría se calcula en `animales/utils.py` mediante `calcular_categoria_edad(especie, fecha_nacimiento)`:
 
 | Especie | Cría | Juvenil 1 | Juvenil 2 | Adulto |
 |---------|------|-----------|-----------|--------|
-| Alpaca/Llama | < 8 meses | Tui Menor (8-12m) | Tui Mayor (12-24m) | ≥ 24 meses |
-| Ovino | < 4 meses | Borrego (4-18m) | — | ≥ 18 meses |
+| Alpaca/Llama | < 8m | Tui Menor (8-12m) | Tui Mayor (12-24m) | ≥ 24m |
+| Ovino | < 4m | Borrego (4-18m) | — | ≥ 18m |
 
-Presente en todos los endpoints de animales como campo de solo lectura `categoria_edad`. La validación parental usa meses reales (`_edad_en_meses`) en lugar de comparación directa de fechas.
+### Gestación por especie
 
-## Planes de Suscripción
+| Especie | Gestación |
+|---------|-----------|
+| Alpaca | 345 días |
+| Llama | 345 días |
+| Ovino | 150 días |
 
-| Plan | Precio | Límite Animales | Generaciones Árbol | Sincronización | Reportes |
-|------|--------|:---------------:|:------------------:|:--------------:|:--------:|
-| Gratuito | Gratis | 20 | 2 | Local | ❌ |
-| Básico | S/ 7.90/mes | 150 | 3 | Nube | ❌ |
-| Criador | S/ 19.90/mes | 500 | 3 | Nube | ✅ CSV/PDF |
+### Razas válidas por especie
 
-## Flujo de Pruebas en Postman
+| Especie | Razas |
+|---------|-------|
+| Alpaca | Huacaya, Suri |
+| Llama | Kara, Ch'aku |
+| Ovino | Criollo, Corriedale, Junín, Hampshire Down, Black Belly, Assaf |
 
-### 1. Registro
-```
-POST http://localhost:8000/api/v1/auth/register/
-{
-  "telefono": "999888777",
-  "nombre": "Juan Pérez",
-  "password": "123456"
-}
-```
+## Validaciones importantes
 
-### 2. Login (obtener token)
-```
-POST http://localhost:8000/api/v1/auth/login/
-{
-  "telefono": "999888777",
-  "password": "123456"
-}
-```
-→ Copiar `access` token → Auth: Bearer Token
-
-### 3. Ver perfil
-```
-GET http://localhost:8000/api/v1/auth/perfil/
-```
-
-### 4. Crear animales
-```
-POST http://localhost:8000/api/v1/animales/
-{
-  "arete": "PADRE-001",
-  "especie": "alpaca",
-  "sexo": "macho",
-  "fecha_nacimiento": "2022-06-15",
-  "nombre": "Relámpago",
-  "raza": "Suri"
-}
-```
-
-### 5. Crear hijo con padres
-```
-POST http://localhost:8000/api/v1/animales/
-{
-  "arete": "HIJO-001",
-  "especie": "alpaca",
-  "sexo": "macho",
-  "fecha_nacimiento": "2024-01-10",
-  "nombre": "Tormenta",
-  "raza": "Huacaya",
-  "padre": "<uid_padre>",
-  "madre": "<uid_madre>"
-}
-```
-
-### 6. Listar con filtros
-```
-GET http://localhost:8000/api/v1/animales/?especie=alpaca&sexo=macho
-```
-
-### 7. Detalle, actualizar, árbol
-```
-GET     /api/v1/animales/{uid}/
-PATCH   /api/v1/animales/{uid}/   {"nombre": "Nuevo nombre"}
-GET     /api/v1/animales/{uid}/arbol/
-```
-
-### 8. Sincronización
-```
-POST http://localhost:8000/api/v1/sync/
-{
-  "last_sync": null,
-  "changes": [
-    {
-      "uid": "<nuevo-uuid>",
-      "arete": "SYNC-001",
-      "especie": "ovino",
-      "sexo": "macho",
-      "fecha_nacimiento": "2024-02-15",
-      "action": "create"
-    }
-  ]
-}
-```
-
-### 9. Cambiar plan y reportes
-```
-POST http://localhost:8000/api/v1/auth/cambiar-plan/
-{"plan": "basico"}
-
-GET http://localhost:8000/api/v1/reporte/animales/?format=csv
-```
+| Validación | Dónde | Comportamiento |
+|------------|-------|----------------|
+| Padre/madre misma especie | `AnimalSerializer.validate()` | Rechaza si especie diferente |
+| Padre debe ser macho | `AnimalSerializer.validate_padre()` | Error si no es macho |
+| Madre debe ser hembra | `AnimalSerializer.validate_madre()` | Error si no es hembra |
+| Padre debe haber nacido antes | `AnimalSerializer.validate()` | Error si padre es menor que hijo |
+| Empadre misma especie | `EmpadreSerializer.validate()` | Hembra y macho deben ser misma especie |
+| Empadre sin duplicado activo | `EmpadreSerializer.validate()` | No permite 2 empadres pendientes/positivos para misma hembra |
+| Parto hembra = empadre hembra | `PartoSerializer.validate()` | La hembra del parto debe coincidir con la del empadre |
+| Raza por especie | `AnimalSerializer.validate()` | Rechaza raza no válida para la especie |
+| Sync: raza por especie | `SyncChangeSerializer.validate()` | Validado también en sincronización |
+| Peso limpio ≤ sucio | `ProduccionSerializer.validate()` | No permite peso limpio mayor al sucio |
+| Fecha esquila ≥ nacimiento | `ProduccionSerializer.validate()` | No permite esquilar antes de nacer |
+| Número de esquila único | Model `unique_together` | No permite duplicar número por animal |
+| Fecha no futura | En todos los serializers con fecha | No permite fechas posteriores a hoy |
 
 ## Tests
 
 ```bash
-.\env\Scripts\python.exe manage.py test
+python manage.py test
 ```
 
-61 tests — modelos, serializers, views, límites por plan, árbol genealógico, validación padre/madre, categoría de edad, producción (CRUD anidado, standalone, sync), estados.
+**109 tests** que cubren:
+- 16 de usuarios (registro, login, refresh, perfil, cambio plan)
+- 20+ de animales (CRUD, filtros, búsqueda, árbol, candidatos, resumen, foto, consanguinidad)
+- 10+ de empadres (CRUD, validaciones misma especie, empadre activo duplicado)
+- 8+ de partos (CRUD, validación hembra = empadre, fecha futura)
+- 6+ de costos (CRUD)
+- 6+ de ventas fibra (CRUD, ingreso total)
+- 10+ de producción (CRUD anidado, standalone, sync, validaciones)
+- 10+ de sincronización (animales, producciones, estado, validaciones)
+- 5+ de reportes (CSV, PDF, filtros)
+- 3+ de ranking fibra
 
-## Estructura del Proyecto
+## Estructura del proyecto
 
 ```
 back_GenApp/
-├── geneapp/              # Configuración del proyecto
-│   ├── settings.py       # Configuración Django
-│   └── urls.py           # Rutas principales
-├── usuarios/             # App de usuarios
-│   ├── models.py         # Modelo Usuario (AbstractUser)
-│   ├── serializers.py    # Register, Login, Perfil, CambioPlan
-│   ├── views.py          # RegisterView, LoginView, PerfilView, etc.
-│   └── urls.py           # Rutas de usuarios
-├── animales/             # App de animales
-│   ├── models.py         # Modelo Animal + Produccion (esquilas)
-│   ├── serializers.py    # CRUD, Sync, Reporte, Produccion serializers
-│   ├── views.py          # AnimalViewSet, ProduccionViewSet, SyncView, ReporteView
-│   ├── utils.py          # calcular_categoria_edad, _edad_en_meses
-│   ├── urls.py           # Rutas de animales + producciones
-│   ├── tests.py          # 77 tests
+├── geneapp/                # Configuración Django
+│   ├── settings.py
+│   └── urls.py
+├── usuarios/               # App de usuarios
+│   ├── models.py
+│   ├── serializers.py
+│   ├── views.py
+│   ├── urls.py
+│   └── tests.py
+├── animales/               # App principal
+│   ├── models.py           # 6 modelos: Animal, Produccion, Empadre, Parto, Costo, VentaFibra
+│   ├── serializers.py      # ~670 líneas, 15+ serializers
+│   ├── views.py            # 13 ViewSets/APIViews
+│   ├── utils.py            # calcular_categoria_edad, PERIODO_GESTACION
+│   ├── urls.py
+│   ├── tests.py            # 109 tests
 │   └── migrations/
-│       ├── 0003_produccion.py
-│       ├── 0004_v2_refactor.py   # activo→estado, peso_nacimiento, peso_vellon_sucio/limpio, numero_esquila, rendimiento removido
-│       ├── 0005_alter_produccion_options...
-│       ├── 0006_alter_produccion_numero_esquila
-│       └── 0007_validaciones_produccion_unique  # UniqueConstraint(animal, numero_esquila)
-├── env/                  # Entorno virtual Python 3.12
-├── media/                # Archivos subidos (fotos)
-│   └── animales/         # Fotos de animales
-├── requirements.txt      # Dependencias Python
-├── .env                  # Variables de entorno
-└── README.md             # Este archivo
+├── Dockerfile
+├── docker-compose.yml
+├── entrypoint.sh
+├── .dockerignore
+├── mysql-init/
+│   └── 01-charset.sql
+├── requirements.txt
+├── .env
+└── README.md
 ```
 
-## Dependencias
-
-```
-Django==4.2.11
-djangorestframework==3.14.0
-djangorestframework-simplejwt==5.3.1
-django-cors-headers==4.3.1
-drf-spectacular==0.26.5
-Pillow==10.0.0
-python-decouple==3.8
-mysqlclient==2.2.4
-gunicorn==21.2.0
-reportlab==4.0.0
-```
-
-## Comandos Útiles
+## Comandos útiles
 
 ```bash
-# Activar entorno virtual (con python directo sin policy)
-.\env\Scripts\python.exe manage.py <comando>
-
-# Crear migraciones
+# Desarrollo local
+.\env\Scripts\python.exe manage.py runserver
+.\env\Scripts\python.exe manage.py test
 .\env\Scripts\python.exe manage.py makemigrations
-
-# Aplicar migraciones
 .\env\Scripts\python.exe manage.py migrate
-
-# Crear superusuario
 .\env\Scripts\python.exe manage.py createsuperuser
 
-# Verificar configuración
-.\env\Scripts\python.exe manage.py check
-
-# Shell interactivo
-.\env\Scripts\python.exe manage.py shell
-
-# Iniciar servidor
-.\env\Scripts\python.exe manage.py runserver
+# Producción Docker
+docker compose up -d --build
+docker compose logs -f
+docker compose down
 ```
 
-## Producción
+## Producción (Nginx)
 
-Para deploy en producción:
+Para HTTPS en producción, configurar Nginx como proxy reverso:
 
-```bash
-pip install -r requirements.txt
-python manage.py collectstatic
-gunicorn geneapp.wsgi:application
+```nginx
+server {
+    listen 80;
+    server_name tudominio.com;
+    return 301 https://$server_name$request_uri;
+}
+
+server {
+    listen 443 ssl;
+    server_name tudominio.com;
+
+    ssl_certificate /etc/letsencrypt/live/tudominio.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/tudominio.com/privkey.pem;
+
+    location / {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location /static/ {
+        alias /app/staticfiles/;
+    }
+
+    location /media/ {
+        alias /app/media/;
+    }
+}
 ```
-
-Configurar Nginx como proxy reverso y habilitar HTTPS con Let's Encrypt.

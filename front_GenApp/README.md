@@ -1,15 +1,16 @@
 # GeneApp Andina — Frontend (Flutter)
 
-Aplicación móvil para gestión de criadores de alpacas, llamas y ovinos. Incluye historial productivo de esquilas, árbol genealógico, categoría de edad automática y sincronización offline.
+Aplicación móvil para gestión de criadores de alpacas, llamas y ovinos. Cubre registro genealógico, gestón reproductiva (empadres/partos), gestión financiera (costos/ventas de fibra), árbol genealógico, consanguinidad, ranking de fibra y reportes.
 
 ## Tecnologías
 
 - **Flutter 3.29+** con Dart 3.8+
 - **Riverpod** — manejo de estado (StateNotifier, FutureProvider)
-- **GoRouter** — navegación con redirect por auth, ShellRoute para bottom nav
+- **GoRouter** — navegación con redirect por auth, ShellRoute para bottom nav (25+ rutas)
 - **Dio** — HTTP con interceptor JWT + refresh automático
 - **flutter_secure_storage** — tokens JWT almacenados seguros
-- **intl** — formato de fechas
+- **flutter_localizations** — localización a español (es_PE)
+- **intl** — formato de fechas (dd/MM/yyyy)
 - **path_provider** — almacenamiento temporal para reportes
 - **share_plus** — compartir reportes (PDF/CSV) por WhatsApp, Drive, etc.
 - **image_picker** — selección de fotos desde galería
@@ -17,11 +18,11 @@ Aplicación móvil para gestión de criadores de alpacas, llamas y ovinos. Inclu
 ## Requisitos
 
 - Flutter SDK ^3.8.1
-- Backend corriendo en `http://10.0.2.2:8000` (Android emulator) o `http://localhost:8000` (iOS/web)
+- Backend corriendo (local: `http://10.0.2.2:8000`, producción: IP del servidor)
 
-Para cambiar la URL del backend: editar `lib/data/services/api_service.dart` línea 8.
+Para cambiar la URL del backend: usar `--dart-define=API_HOST=<IP>` al compilar.
 
-## Instalación
+## Instalación (desarrollo)
 
 ```bash
 cd front_genapp
@@ -29,105 +30,132 @@ flutter pub get
 flutter run
 ```
 
-Para Android:
+Para construir APK de producción:
 ```bash
-flutter run
-```
-
-Para iOS:
-```bash
-cd ios
-pod install
-cd ..
-flutter run
+flutter build apk --dart-define=API_HOST=<IP_EC2>
 ```
 
 ## Estructura del proyecto
 
 ```
 lib/
-├── main.dart                    # Entry point + ProviderScope
-├── app.dart                     # MaterialApp.router con tema
+├── main.dart                          # Entry point + ProviderScope
+├── app.dart                           # MaterialApp.router con tema + locale español
 ├── data/
 │   ├── models/
-│   │   ├── animal_model.dart    # AnimalModel (con estado, motivoEstado, pesoNacimientoKg), AnimalListModel, CandidatoModel, ArbolNode (con estado)
-│   │   ├── produccion_model.dart # ProduccionModel, ProduccionSyncChange
-│   │   └── user_model.dart      # UserModel
+│   │   ├── animal_model.dart          # AnimalModel, CandidatoModel, ArbolNode
+│   │   ├── empadre_model.dart         # EmpadreModel, EmpadreListModel
+│   │   ├── parto_model.dart           # PartoModel
+│   │   ├── costo_model.dart           # CostoModel, CostoListModel
+│   │   ├── venta_fibra_model.dart     # VentaFibraModel, VentaFibraListModel
+│   │   ├── produccion_model.dart      # ProduccionModel
+│   │   └── user_model.dart            # UserModel
 │   ├── services/
-│   │   └── api_service.dart     # Dio + interceptors JWT + refresh
+│   │   └── api_service.dart           # Dio + interceptors JWT + extractError()
 │   └── repositories/
-│       ├── auth_repository.dart # Auth (login, register, perfil, logout)
-│       └── animal_repository.dart # Animales + Producciones CRUD
+│       ├── auth_repository.dart       # Auth (login, register, perfil, logout)
+│       └── animal_repository.dart     # Animales + Producciones CRUD
 ├── routes/
-│   └── app_router.dart          # GoRouter con redirect por auth + ShellRoute
-├── ui/
-│   ├── core/
-│   │   ├── constants.dart       # AppStrings, AppRoutes
-│   │   ├── theme.dart           # Tema Material 3 verde
-│   │   └── widgets/
-│   │       └── loading_button.dart  # Botón con estado de carga
-│   └── features/
-│       ├── auth/
-│       │   ├── providers/
-│       │   │   └── auth_provider.dart  # AuthState, AuthNotifier, apiServiceProvider
-│       │   └── views/
-│       │       ├── login_screen.dart
-│       │       └── register_screen.dart
-│       ├── home/
-│       │   └── views/
-│       │       └── home_shell.dart     # Bottom navigation bar
-│       ├── dashboard/
-│       │   └── views/
-│       │       └── dashboard_screen.dart  # Stats, plan banner, quick actions
-│       ├── animales/
-│       │   ├── providers/
-│       │   │   └── animal_provider.dart  # AnimalList, detail, árbol, resumen, producciones
-│       │   └── views/
-│       │       ├── animal_list_screen.dart   # Lista + filtros + buscar + scroll infinito
-│       │       ├── animal_detail_screen.dart # Detalle con header, padres, historial esquilas
-│       │       ├── animal_form_screen.dart   # Crear/editar con selector de padres + foto
-│       │       ├── produccion_form_sheet.dart # Modal para crear/editar esquila
-│       │       └── arbol_screen.dart         # Árbol genealógico vertical
-│       ├── perfil/
-│       │   └── views/
-│       │       └── perfil_screen.dart  # Header gradiente, plan, info, logout
-│       └── reportes/
-│           └── views/
-│               └── reportes_screen.dart  # Descarga CSV/PDF
+│   └── app_router.dart                # GoRouter con 25+ rutas
+└── ui/
+    ├── core/
+    │   ├── theme.dart                 # Tema Material 3 verde (AppTheme)
+    │   ├── constants.dart             # AppStrings, AppRoutes
+    │   └── widgets/
+    │       ├── animal_selector.dart   # Selector de animales con búsqueda + filtro especie
+    │       └── loading_button.dart    # Botón con estado de carga
+    └── features/
+        ├── auth/views/
+        │   ├── login_screen.dart
+        │   └── register_screen.dart
+        ├── home/views/
+        │   └── home_shell.dart        # Bottom navigation (4 tabs)
+        ├── dashboard/views/
+        │   └── dashboard_screen.dart   # Stats, especies, acciones rápidas
+        ├── animales/views/
+        │   ├── animal_list_screen.dart  # Lista + filtros + scroll infinito
+        │   ├── animal_detail_screen.dart# Detalle con header, padres, esquilas
+        │   ├── animal_form_screen.dart  # Crear/editar con sexo cards + raza por especie
+        │   ├── arbol_screen.dart        # Árbol genealógico clickeable
+        │   └── produccion_form_sheet.dart# Modal esquila
+        ├── gestion/views/
+        │   ├── gestion_screen.dart      # Hub de gestión
+        │   ├── reproductivo_screen.dart # Acceso a empadres/partos
+        │   └── financiero_screen.dart   # Acceso a costos/ventas
+        ├── empadres/views/
+        │   ├── empadre_list_screen.dart
+        │   └── empadre_form_screen.dart # Con AnimalSelector hembra/macho
+        ├── partos/views/
+        │   ├── parto_list_screen.dart
+        │   └── parto_form_screen.dart   # Con selector de empadre
+        ├── costos/views/
+        │   ├── costo_list_screen.dart
+        │   └── costo_form_screen.dart
+        ├── ventas_fibra/views/
+        │   ├── venta_fibra_list_screen.dart
+        │   └── venta_fibra_form_screen.dart # Total estimado automático
+        ├── consanguinidad/views/
+        │   └── consanguinidad_screen.dart
+        ├── fibra_ranking/views/
+        │   └── fibra_ranking_screen.dart
+        ├── perfil/views/
+        │   └── perfil_screen.dart
+        └── reportes/views/
+            └── reportes_screen.dart
 ```
 
-## Pantallas
+## Pantallas (25+ rutas)
 
 ### Auth
-- **Login**: formulario con teléfono y contraseña
-- **Register**: registro con teléfono, nombre, contraseña
+- **Login/Register**: formularios con teléfono y contraseña
 
-### Dashboard
+### Dashboard (Inicio)
 - Banner del plan con barra de progreso
-- Estadísticas: total, machos, hembras
-- Especies: alpaca, llama, ovino
-- Acciones rápidas: nuevo animal, ver todos, reportes
+- Estadísticas: total, machos, hembras, desglose por especie
+- Acciones rápidas
 
 ### Animales
-- **Lista**: scroll infinito, filtros por especie/sexo/**estado**, buscador por arete/nombre, tag de categoría de edad en cada card, deslizar para eliminar
-- **Detalle**: header con gradiente + foto, info con categoría de edad + **estado con color**, padres tappables, observaciones, **historial de esquilas** con FAB para agregar
-- **Formulario**: crear/editar con selector de padres (buscador modal con filtro por especie y categoría de edad), carga de fotos, **dropdown de estado**, **motivo requerido si estado ≠ VIVO**, **peso al nacer**, validaciones cliente (max_length, numérico)
-- **Producción**: modal bottom sheet con DatePicker, peso vellón **sucio** (obligatorio), peso vellón **limpio** (opcional, ≤ sucio), **número de esquila** (entero positivo, único por animal), observaciones — editar/eliminar desde la lista. Validación: fecha ≥ nacimiento del animal
-- **Árbol**: vista vertical indentada con líneas conectoras, cada nodo muestra **estado** (badge verde/naranja/rojo)
+- **Lista**: scroll infinito, filtros por especie/sexo/estado, buscador con debounce, categoría de edad en cards, deslizar para eliminar
+- **Detalle**: header con gradiente + foto, info completa, padres tappables, historial de esquilas, botón árbol genealógico
+- **Formulario**: sexo en tarjetas visuales, raza filtrada por especie, selector de padres con búsqueda, foto, estado, peso al nacer
+- **Árbol genealógico**: vista vertical indentada, nodos clickeables para navegar al detalle
+
+### Gestión > Reproductivo
+- **Empadres**: lista + formulario con AnimalSelector (hembra/macho), dropdown de resultado
+- **Partos**: lista + formulario con selector de empadre vinculado, número de crías, incidencias
+
+### Gestión > Financiero
+- **Costos**: lista + formulario con tipo de costo, monto, fecha
+- **Ventas de Fibra**: lista + formulario con kg, precio/kg, total estimado automático, comprador
+
+### Consanguinidad
+- Seleccionar dos animales y calcular coeficiente de consanguinidad
+
+### Ranking de Fibra
+- Ranking por diámetro, factor de confort, medulación
 
 ### Perfil
-- Header con gradiente, avatar, nombre, teléfono
-- Card del plan con barra de progreso y botón cambiar plan
-- Información: generaciones, fecha de registro
-- Pull-to-refresh para recargar datos
-- Cerrar sesión
+- Header con gradiente, plan con barra de progreso, cambiar plan, cerrar sesión
 
 ### Reportes
-- **Animales**: descarga CSV o PDF con lista completa de animales (incluye Total Esquilas)
-- **Producción**: descarga CSV o PDF con historial de esquilas (arete, animal, fecha, peso, rendimiento)
-- Todos los reportes se abren con el **Share sheet** del sistema para guardar o compartir
-- Solo disponible para planes Básico/Criador
-- PDF con diseño profesional: orientación horizontal, colores alternados, título, fecha de generación
+- Descarga CSV/PDF de animales y esquilas, compartir por WhatsApp/Drive
+
+## Diseño y UX
+
+- **Tema Material 3** verde personalizado (AppTheme)
+- **Cards** con padding consistente para agrupar secciones
+- **AnimalSelector**: widget reutilizable con modal de búsqueda + filtro por especie
+- **Sexo en tarjetas**: toggle visual entre Macho/Hembra en vez de dropdown
+- **Iconos** en todos los campos de formulario
+- **Drag handle** en bottom sheets
+- **DatePicker** localizado a español
+- **isExpanded** en todos los DropdownButtonFormField para evitar overflow
+
+## Manejo de errores
+
+- `ApiService.extractError()`: limpia los mapas de error de DRF y muestra mensajes legibles
+- Todos los catch blocks usan `extractError()` + `ScaffoldMessenger`
+- Sin catch silenciosos
 
 ## Tests
 
@@ -135,7 +163,7 @@ lib/
 flutter test
 ```
 
-Cubren: modelos (fromJson/toJson con tryParse), estados (copyWith), widgets (LoadingButton), integración.
+Cubren: modelos (fromJson/toJson), estados (copyWith), widgets.
 
 ## Análisis estático
 
@@ -147,10 +175,16 @@ flutter analyze
 ## Configuración de plataformas
 
 ### Android
-- `AndroidManifest.xml` (main): permiso INTERNET agregado
-- NDK versión 27.0.12077973 (compatibilidad flutter_secure_storage)
+- `AndroidManifest.xml`: permiso INTERNET, `usesCleartextTraffic=true` para HTTP en producción
 - minSdk: flutter.minSdkVersion
 
 ### iOS
 - `Info.plist`: `NSAllowsArbitraryLoads = true` para HTTP
-- Soporta orientaciones portrait y landscape
+
+### Build para producción
+
+```bash
+# Con IP del servidor backend
+flutter build apk --dart-define=API_HOST=3.18.194.167
+# El APK queda en: build/app/outputs/flutter-apk/app-release.apk
+```
