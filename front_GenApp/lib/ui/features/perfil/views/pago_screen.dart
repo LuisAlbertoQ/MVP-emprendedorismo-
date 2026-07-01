@@ -83,6 +83,7 @@ class _PagoScreenState extends ConsumerState<PagoScreen> {
     final monto = _datosPago?[montoKey]?.toString() ?? '—';
     final celular = _datosPago?['celular'] as String? ?? '—';
     final qrUrl = _datosPago?['qr'] as String?;
+    final mediaUrl = (ApiService.baseUrl.replaceFirst('/api/v1', ''));
 
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -131,7 +132,7 @@ class _PagoScreenState extends ConsumerState<PagoScreen> {
                   ClipRRect(
                     borderRadius: BorderRadius.circular(12),
                     child: Image.network(
-                      qrUrl.startsWith('http') ? qrUrl : '${ApiService.baseUrl}$qrUrl',
+                      qrUrl.startsWith('http') ? qrUrl : '$mediaUrl$qrUrl',
                       height: 180,
                       width: 180,
                       fit: BoxFit.contain,
