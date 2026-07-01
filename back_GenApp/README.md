@@ -84,6 +84,10 @@ curl http://localhost:8000/api/v1/
 
 La API queda en `http://<IP_EC2>:8000/api/v1/`. Para HTTPS, agregar Nginx como proxy reverso + Let's Encrypt.
 
+### Notas de producción
+
+- **Media files**: `urls.py` usa `django.views.static.serve` (no `static()`) para servir archivos subidos (`/media/`) incluso con `DEBUG=False`. Sin Nginx, Gunicorn sirve media directamente — suficiente para MVP.
+
 ### Archivos de despliegue
 
 | Archivo | Propósito |
@@ -230,7 +234,7 @@ La API queda en `http://<IP_EC2>:8000/api/v1/`. Para HTTPS, agregar Nginx como p
 ### Animal
 - `uid` (UUID), `arete` (único por usuario), `nombre`, `especie` (alpaca/llama/ovino), `sexo`, `raza`, `fecha_nacimiento`
 - `padre` / `madre` — Self-referential FK
-- `foto`, `estado` (VIVO/VENDIDO/MUERTO), `fecha_estado`, `motivo_estado`
+- `foto` (ImageField en serializer — lectura escritura, retorna URL absoluta con request context), `estado` (VIVO/VENDIDO/MUERTO), `fecha_estado`, `motivo_estado`
 - `peso_nacimiento_kg`, `sync_status`
 
 ### Produccion (esquilas)

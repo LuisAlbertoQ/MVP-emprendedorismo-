@@ -342,6 +342,14 @@ flutter analyze  # 0 issues
 | Notificaciones push (FCM) | ❌ Futuro |
 | Modo offline completo | ❌ Futuro |
 
+## Fix History (sesión actual)
+
+| Fix | Archivos | Descripción |
+|-----|----------|-------------|
+| QR no visible en producción | `front_genapp/.../pago_screen.dart`, `back_GenApp/geneapp/urls.py` | La URL del QR se construía con `/api/v1/media/` (404). Además, `DEBUG=False` impedía servir `/media/` con `static()`. Se cambió a `re_path` con `django.views.static.serve`. |
+| Fotos de animales no se guardaban | `back_GenApp/animales/serializers.py` | `foto = SerializerMethodField()` es read-only, ignoraba el file upload. Cambiado a `ImageField(required=False, allow_null=True)` que sí procesa writes y devuelve URL completa. |
+| Foto existente no visible al editar animal | `front_genapp/.../animal_form_screen.dart` | `_loadAnimal()` nunca cargaba la foto existente. Se agregó `_existingFotoUrl` y `_FotoPicker` ahora muestra `Image.network` cuando hay foto previa sin selección local. |
+
 ## Licencia
 
 Uso interno — MVP para validación con criadores de la región andina.

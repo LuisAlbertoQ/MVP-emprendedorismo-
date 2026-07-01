@@ -122,7 +122,7 @@ lib/
 ### Animales
 - **Lista**: scroll infinito, filtros por especie/sexo/estado, buscador con debounce, categoría de edad en cards, deslizar para eliminar
 - **Detalle**: header con gradiente + foto, info completa, padres tappables, historial de esquilas, botón árbol genealógico
-- **Formulario**: sexo en tarjetas visuales, raza filtrada por especie, selector de padres con búsqueda, foto, estado, peso al nacer
+- **Formulario**: sexo en tarjetas visuales, raza filtrada por especie, selector de padres con búsqueda, foto (con preview de foto existente al editar), estado, peso al nacer
 - **Árbol genealógico**: vista vertical indentada, nodos clickeables para navegar al detalle
 
 ### Gestión > Reproductivo
@@ -150,6 +150,7 @@ lib/
 - Campo opcional: número de operación
 - Confirmación: "Solicitud enviada, el administrador validará tu pago"
 - Planes bloqueados si hay una solicitud pendiente
+- La URL del QR se construye sin `/api/v1` en el path (usa `mediaUrl` = `baseUrl` sin `/api/v1`)
 
 ### Notificaciones
 - Campana 🔔 con badge rojo en el Dashboard
