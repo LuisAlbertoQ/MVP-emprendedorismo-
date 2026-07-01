@@ -61,6 +61,7 @@ class _AnimalFormScreenState extends ConsumerState<AnimalFormScreen> {
   bool _loadingCandidatos = false;
 
   String? _fotoPath;
+  String? _existingFotoUrl;
   final _picker = ImagePicker();
   Map<String, String> _fieldErrors = {};
 
@@ -102,6 +103,7 @@ class _AnimalFormScreenState extends ConsumerState<AnimalFormScreen> {
       _sexo = animal.sexo;
       _estado = animal.estado;
       _motivoCtrl.text = animal.motivoEstado;
+      _existingFotoUrl = animal.foto;
       _fechaNac = animal.fechaNacimiento;
       if (animal.pesoNacimientoKg != null) {
         _pesoNacCtrl.text = animal.pesoNacimientoKg.toString();
@@ -447,8 +449,14 @@ class _AnimalFormScreenState extends ConsumerState<AnimalFormScreen> {
               _buildSection('Adicional', [
                 _FotoPicker(
                   path: _fotoPath,
+                  existingUrl: _existingFotoUrl,
                   onPick: _pickFoto,
-                  onClear: () => setState(() => _fotoPath = null),
+                  onClear: () {
+                    setState(() {
+                      _fotoPath = null;
+                      _existingFotoUrl = null;
+                    });
+                  },
                 ),
                 const SizedBox(height: 16),
                 TextFormField(
@@ -524,17 +532,22 @@ class _SexoCard extends StatelessWidget {
 
 class _FotoPicker extends StatelessWidget {
   final String? path;
+  final String? existingUrl;
   final VoidCallback onPick;
   final VoidCallback onClear;
 
   const _FotoPicker({
     required this.path,
+    this.existingUrl,
     required this.onPick,
     required this.onClear,
   });
 
   @override
   Widget build(BuildContext context) {
+    final hasLocal = path != null;
+    final hasExisting = !hasLocal && existingUrl != null && existingUrl!.isNotEmpty;
+
     return InkWell(
       onTap: onPick,
       borderRadius: BorderRadius.circular(12),
@@ -542,7 +555,7 @@ class _FotoPicker extends StatelessWidget {
         decoration: InputDecoration(
           labelText: 'Foto',
           prefixIcon: const Icon(Icons.camera_alt),
-          suffixIcon: path != null
+          suffixIcon: hasLocal || hasExisting
               ? IconButton(
                   icon: const Icon(Icons.close),
                   onPressed: onClear,
@@ -551,7 +564,7 @@ class _FotoPicker extends StatelessWidget {
         ),
         child: Row(
           children: [
-            if (path != null)
+            if (hasLocal)
               ClipRRect(
                 borderRadius: BorderRadius.circular(6),
                 child: Image.file(
@@ -560,14 +573,26 @@ class _FotoPicker extends StatelessWidget {
                   height: 48,
                   fit: BoxFit.cover,
                 ),
+              )
+            else if (hasExisting)
+              ClipRRect(
+                borderRadius: BorderRadius.circular(6),
+                child: Image.network(
+                  existingUrl!,
+                  width: 48,
+                  height: 48,
+                  fit: BoxFit.cover,
+                ),
               ),
-            if (path != null) const SizedBox(width: 12),
+            if (hasLocal || hasExisting) const SizedBox(width: 12),
             Text(
-              path != null
+              hasLocal
                   ? path!.split('/').last
-                  : 'Toca para seleccionar foto',
+                  : hasExisting
+                      ? 'Foto actual'
+                      : 'Toca para seleccionar foto',
               style: TextStyle(
-                color: path != null ? null : Colors.grey,
+                color: hasLocal || hasExisting ? null : Colors.grey,
                 fontSize: 14,
               ),
               overflow: TextOverflow.ellipsis,
