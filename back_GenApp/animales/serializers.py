@@ -33,7 +33,7 @@ class AnimalSerializer(serializers.ModelSerializer):
     padre = UidToAnimalField(required=False, allow_null=True)
     madre = UidToAnimalField(required=False, allow_null=True)
     categoria_edad = serializers.SerializerMethodField()
-    foto = serializers.SerializerMethodField()
+    foto = serializers.ImageField(required=False, allow_null=True)
     raza = serializers.ChoiceField(choices=Raza.choices, required=False, allow_blank=True, default='')
 
     class Meta:
@@ -49,14 +49,6 @@ class AnimalSerializer(serializers.ModelSerializer):
 
     def get_categoria_edad(self, obj):
         return calcular_categoria_edad(obj.especie, obj.fecha_nacimiento)
-
-    def get_foto(self, obj):
-        if obj.foto:
-            request = self.context.get('request')
-            if request:
-                return request.build_absolute_uri(obj.foto.url)
-            return obj.foto.url
-        return None
 
     def validate_fecha_nacimiento(self, value):
         if value > date.today():
