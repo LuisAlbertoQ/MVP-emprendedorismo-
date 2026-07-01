@@ -102,8 +102,14 @@ La API queda en `http://<IP_EC2>:8000/api/v1/`. Para HTTPS, agregar Nginx como p
 | POST | `register/` | Registro (teléfono, nombre, password) |
 | POST | `login/` | Login → access + refresh tokens |
 | POST | `refresh/` | Refrescar token |
-| GET | `perfil/` | Perfil + plan + animales usados |
-| POST | `cambiar-plan/` | Cambiar plan (basico/criador) |
+| GET | `perfil/` | Perfil + plan + animales + solicitud_pendiente |
+| POST | `cambiar-plan/` | Cambiar plan (solo gratuito, los demás vía pago) |
+| GET | `datos-pago/` | QR + celular + montos (ConfiguracionPago) |
+| POST | `solicitar-pago/` | Subir comprobante + plan → crea SolicitudPago |
+| GET | `mis-solicitudes/` | Historial de solicitudes de pago |
+| GET | `notificaciones/` | Lista de notificaciones del usuario |
+| PATCH | `notificaciones/` | Marcar como leída (una o todas) |
+| GET | `notificaciones/no-leidas/` | Conteo de no leídas |
 | POST | `webhook-yape/` | Webhook pagos Yape (stub) |
 
 ### Animales (`/api/v1/animales/`)
@@ -171,26 +177,30 @@ La API queda en `http://<IP_EC2>:8000/api/v1/`. Para HTTPS, agregar Nginx como p
 | PATCH | `/{uid}/` | Actualizar |
 | DELETE | `/{uid}/` | Eliminar físico |
 
-### Reportes (`/api/v1/reporte/`)
-
-| Método | Endpoint | Descripción | Plan |
-|--------|----------|-------------|------|
-| GET | `animales/?format=csv` | CSV de animales | Básico+ |
-| GET | `animales/?format=pdf` | PDF de animales | Criador |
-| GET | `esquilas/?format=csv` | CSV de esquilas | Básico+ |
-| GET | `esquilas/?format=pdf` | PDF de esquilas | Criador |
-
 ### Sincronización (`/api/v1/`)
 
 | Método | Endpoint | Descripción |
 |--------|----------|-------------|
 | POST | `sync/` | Sync offline (animales + producciones) |
 
-### Ranking / Fibra (`/api/v1/`)
+### Reportes (`/api/v1/reportes/`)
+
+| Método | Endpoint | Descripción | Plan |
+|--------|----------|-------------|------|
+| GET | `animales/?format=csv\|pdf` | Animales (raza, categoría, peso nac., costo total) | Básico+ |
+| GET | `esquilas/?format=csv\|pdf` | Esquilas (diámetro, confort, medulación) | Básico+ |
+| GET | `empadres/?format=csv\|pdf` | Empadres (hembra, macho, fecha, resultado) | Básico+ |
+| GET | `partos/?format=csv\|pdf` | Partos (hembra, fecha, crías, incidencias) | Básico+ |
+| GET | `costos/?format=csv\|pdf` | Costos (animal, tipo, monto, fecha) | Básico+ |
+| GET | `ventas-fibra/?format=csv\|pdf` | Ventas Fibra (kg, precio, comprador, ingreso total) | Básico+ |
+| GET | `ranking-fibra/?format=csv\|pdf` | Ranking por diámetro, confort, medulación | Básico+ |
+| GET | `consanguinidad/?format=csv\|pdf` | Consanguinidad (animal, coeficiente, padres) | Básico+ |
+
+### Ranking / Fibra (JSON, `/api/v1/`)
 
 | Método | Endpoint | Descripción |
 |--------|----------|-------------|
-| GET | `ranking-fibra/` | Ranking por diámetro, confort, medulación |
+| GET | `ranking-fibra/` | Ranking JSON por diámetro, confort, medulación |
 
 ### Documentación
 
@@ -204,7 +214,18 @@ La API queda en `http://<IP_EC2>:8000/api/v1/`. Para HTTPS, agregar Nginx como p
 ### Usuario
 - `telefono` — Identificador único (login)
 - `plan` — Gratuito / Básico / Criador
-- `limite_animales` / `animales_count` — Propiedades calculadas
+- `limite_animales` / `animales_count` / `generations_allowed` — Propiedades calculadas
+- `solicitud_pendiente` — Campo virtual en PerfilSerializer (pendiente de pago)
+
+### SolicitudPago
+- `uid` (UUID), `usuario` (FK), `plan_solicitado`, `monto`
+- `comprobante` (ImageField), `numero_operacion` (opcional), `estado` (pendiente/aprobado/rechazado)
+
+### ConfiguracionPago (singleton)
+- `celular`, `qr` (ImageField), `monto_basico`, `monto_criador`
+
+### Notificacion
+- `usuario` (FK), `mensaje`, `tipo` (solicitud_aprobada/rechazada/sistema), `leido`, `created_at`
 
 ### Animal
 - `uid` (UUID), `arete` (único por usuario), `nombre`, `especie` (alpaca/llama/ovino), `sexo`, `raza`, `fecha_nacimiento`
@@ -276,13 +297,29 @@ La API queda en `http://<IP_EC2>:8000/api/v1/`. Para HTTPS, agregar Nginx como p
 | Número de esquila único | Model `unique_together` | No permite duplicar número por animal |
 | Fecha no futura | En todos los serializers con fecha | No permite fechas posteriores a hoy |
 
+## Admin Django
+
+### Usuarios (`/admin/usuarios/usuario/`)
+- Campos visibles: teléfono, nombre, plan, activo, fechas (sin grupos/permisos)
+- Inline con todos los animales del usuario (solo lectura)
+
+### Solicitudes de Pago (`/admin/usuarios/solicitudpago/`)
+- Lista con: usuario, plan, monto, estado, preview del comprobante
+- Acción: **Aprobar** → cambia el plan del usuario + crea notificación
+- Acción: **Rechazar** → marca como rechazado + crea notificación
+- Solo lectura (no se puede crear/editar manualmente)
+
+### Configuración de Pago (`/admin/usuarios/configuracionpago/`)
+- Singleton: solo una fila
+- Campos: celular, QR, monto_básico (S/ 7.90), monto_criador (S/ 19.90)
+
 ## Tests
 
 ```bash
 python manage.py test
 ```
 
-**109 tests** que cubren:
+**137 tests** que cubren:
 - 16 de usuarios (registro, login, refresh, perfil, cambio plan)
 - 20+ de animales (CRUD, filtros, búsqueda, árbol, candidatos, resumen, foto, consanguinidad)
 - 10+ de empadres (CRUD, validaciones misma especie, empadre activo duplicado)
@@ -291,8 +328,7 @@ python manage.py test
 - 6+ de ventas fibra (CRUD, ingreso total)
 - 10+ de producción (CRUD anidado, standalone, sync, validaciones)
 - 10+ de sincronización (animales, producciones, estado, validaciones)
-- 5+ de reportes (CSV, PDF, filtros)
-- 3+ de ranking fibra
+- 28 de reportes (8 endpoints × CSV/PDF/denied + columnas nuevas + ordenamiento)
 
 ## Estructura del proyecto
 
@@ -307,13 +343,19 @@ back_GenApp/
 │   ├── views.py
 │   ├── urls.py
 │   └── tests.py
-├── animales/               # App principal
+├── animales/               # App principal (CRUD + sync)
 │   ├── models.py           # 6 modelos: Animal, Produccion, Empadre, Parto, Costo, VentaFibra
 │   ├── serializers.py      # ~670 líneas, 15+ serializers
-│   ├── views.py            # 13 ViewSets/APIViews
+│   ├── views.py            # ViewSets + SyncView + RankingFibraView
 │   ├── utils.py            # calcular_categoria_edad, PERIODO_GESTACION
 │   ├── urls.py
-│   ├── tests.py            # 109 tests
+│   ├── tests.py            # 109 tests (modelos, CRUD, sync, algoritmos)
+│   └── migrations/
+├── reportes/               # App de reportes (separada)
+│   ├── renderers.py        # CSVRenderer, PDFRenderer
+│   ├── views.py            # 8 Reporte*View + _build_pdf + BaseReporteView
+│   ├── urls.py             # /api/v1/reportes/*
+│   ├── tests.py            # 28 tests para todos los reportes
 │   └── migrations/
 ├── Dockerfile
 ├── docker-compose.yml

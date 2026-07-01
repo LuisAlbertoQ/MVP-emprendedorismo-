@@ -42,4 +42,5 @@ class AppRoutes {
   static const String costosCrear = '/gestion/costos/crear';
   static const String ventasFibra = '/gestion/ventas-fibra';
   static const String ventasFibraCrear = '/gestion/ventas-fibra/crear';
+  static const String notificaciones = '/notificaciones';
 }

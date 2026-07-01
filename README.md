@@ -21,7 +21,7 @@ Los criadores de la región andina enfrentan:
 3. **Gestión financiera**: registrar costos por animal (alimentación, sanidad, esquila) y ventas de fibra (kg, precio, total estimado)
 4. **Árbol genealógico** de hasta 3 generaciones con consanguinidad calculada
 5. **Ranking de fibra** por diámetro, factor de confort y medulación
-6. **Reportes** de animales y esquilas en CSV/PDF exportables
+6. **8 tipos de reportes** en CSV/PDF exportables (Animales, Esquilas, Empadres, Partos, Costos, Ventas Fibra, Ranking Fibra, Consanguinidad)
 7. **Sincronización offline** total
 8. **Autenticación JWT** con refresh automático
 
@@ -54,7 +54,7 @@ Los criadores de la región andina enfrentan:
 5. **Registra ventas de fibra**: kg vendidos, precio, comprador
 6. **Consulta el árbol genealógico** y coeficiente de consanguinidad
 7. **Revisa el ranking de fibra** para identificar mejores reproductores
-8. **Exporta reportes** en CSV/PDF
+8. **Exporta reportes** en CSV/PDF (8 tipos disponibles)
 
 ## Funcionalidades
 
@@ -87,15 +87,28 @@ Los criadores de la región andina enfrentan:
 - **Dashboard** con resumen: total por especie, machos, hembras
 - **Consanguinidad**: calcular coeficiente entre dos animales
 - **Ranking de fibra**: ranking por diámetro, factor de confort, medulación
-- **Reportes**: animales y esquilas en CSV/PDF
+- **8 reportes**: Animales, Esquilas, Empadres, Partos, Costos, Ventas Fibra, Ranking Fibra, Consanguinidad — todos en CSV/PDF
 
 ### Planes de suscripción
 
 | Plan | Precio | Animales | Generaciones | Sincronización | Reportes |
 |------|--------|:--------:|:------------:|:--------------:|:--------:|
 | Gratuito | Gratis | 20 | 2 | Local | ❌ |
-| Básico | S/ 7.90/mes | 150 | 3 | Nube | ❌ |
-| Criador | S/ 19.90/mes | 500 | 3 | Nube | ✅ CSV/PDF |
+| Básico | S/ 7.90/mes | 150 | 3 | Nube | ✅ |
+| Criador | S/ 19.90/mes | 500 | 3 | Nube | ✅ |
+
+### Pagos (manual Yape/Plin)
+- Configuración desde admin: QR estático + celular + montos por plan
+- Usuario paga vía Yape/Plin y sube captura de comprobante
+- Admin aprueba/rechaza desde Django admin → cambia el plan automáticamente
+- Montos configurables: S/ 7.90 Básico, S/ 19.90 Criador
+
+### Notificaciones
+- Sistema de notificaciones interno (no push)
+- Al aprobar/rechazar un pago, se crea notificación automática
+- Campana con badge rojo en el Dashboard con conteo de no leídas
+- Pantalla de lista con iconos por tipo (aprobado/rechazado)
+- Al tocar una notificación se marca automáticamente como leída
 
 ## Tecnologías
 
@@ -146,20 +159,26 @@ MVP/
 │   ├── geneapp/                    # Configuración Django
 │   │   ├── settings.py
 │   │   └── urls.py
-│   ├── usuarios/                   # App de usuarios
-│   │   ├── models.py
-│   │   ├── serializers.py
-│   │   ├── views.py
+│   ├── usuarios/                   # App de usuarios + pagos + notificaciones
+│   │   ├── models.py               # Usuario, SolicitudPago, ConfiguracionPago, Notificacion
+│   │   ├── serializers.py          # Login, Register, Perfil, Pago, Notificaciones
+│   │   ├── views.py                # Auth + pagos + webhook (stub)
 │   │   ├── urls.py
+│   │   ├── admin.py                # UsuarioAdmin simplificado, SolicitudPagoAdmin con acciones
 │   │   └── tests.py
-│   ├── animales/                   # App principal
+│   ├── animales/                   # App principal (CRUD + sync)
 │   │   ├── models.py               # Animal, Produccion, Empadre, Parto, Costo, VentaFibra
-│   │   ├── serializers.py          # CRUD, Sync, Reporte, + nuevos módulos
+│   │   ├── serializers.py          # CRUD, Sync, + nuevos módulos
 │   │   ├── views.py                # ViewSets para todos los modelos
 │   │   ├── utils.py                # calcular_categoria_edad, PERIODO_GESTACION
 │   │   ├── urls.py
-│   │   ├── tests.py                # 109 tests
+│   │   ├── tests.py                # Tests de modelos, CRUD, sync, algoritmos
 │   │   └── migrations/
+│   ├── reportes/                   # App de reportes (separada)
+│   │   ├── renderers.py            # CSVRenderer, PDFRenderer
+│   │   ├── views.py                # 8 Reporte*View + _build_pdf + BaseReporteView
+│   │   ├── urls.py                 # /api/v1/reportes/*
+│   │   └── tests.py                # 28 tests para todos los reportes
 │   ├── Dockerfile                  # Imagen Docker para producción
 │   ├── docker-compose.yml          # Orquestación MySQL + API
 │   ├── entrypoint.sh               # Script de inicio del contenedor
@@ -256,12 +275,12 @@ flutter build apk --dart-define=API_HOST=<IP_EC2>
 
 ## Tests
 
-### Backend — 109 tests
+### Backend — 137 tests
 ```bash
 cd back_GenApp
 python manage.py test
 ```
-Cubren: modelos, serializers, CRUD (animales, empadres, partos, costos, ventas), validaciones (especie, sexo, fechas), árbol genealógico, sincronización, reportes, consanguinidad, ranking fibra.
+Cubren: modelos, serializers, CRUD (animales, empadres, partos, costos, ventas), validaciones (especie, sexo, fechas), árbol genealógico, sincronización, **8 reportes** (animales, esquilas, empadres, partos, costos, ventas fibra, ranking fibra, consanguinidad), consanguinidad, ranking fibra, pagos, notificaciones.
 
 ### Frontend
 ```bash
@@ -303,7 +322,7 @@ flutter analyze  # 0 issues
 | Historial de esquilas (Producción) | ✅ |
 | Rendimiento calculado en vivo | ✅ |
 | Sincronización offline de animales + producciones | ✅ |
-| Reportes CSV/PDF (animales + esquilas) | ✅ |
+| 8 reportes CSV/PDF (animales, esquilas, empadres, partos, costos, ventas fibra, ranking fibra, consanguinidad) | ✅ |
 | Foto visible en detalle del animal | ✅ |
 | Estado animal (Vivo/Vendido/Muerto + motivo + fecha) | ✅ |
 | Peso al nacer | ✅ |
@@ -313,8 +332,14 @@ flutter analyze  # 0 issues
 | Dropdowns con isExpanded (sin overflow) | ✅ |
 | Candidatos incluyen no-VIVO al editar (include_uids) | ✅ |
 | Docker + docker-compose para producción | ✅ |
+| Pagos Yape/Plin (QR + comprobante) | ✅ |
+| Admin aprueba/rechaza solicitud | ✅ |
+| Notificaciones internas (campana + badge) | ✅ |
+| Admin: UsuarioAdmin simplificado | ✅ |
+| Admin: ver animales del usuario inline | ✅ |
+| Admin: filtro por usuario en animales | ✅ |
 | Webhook Yape (stub) | ⚠️ Stub |
-| Notificaciones push | ❌ Futuro |
+| Notificaciones push (FCM) | ❌ Futuro |
 | Modo offline completo | ❌ Futuro |
 
 ## Licencia

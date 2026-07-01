@@ -5,7 +5,7 @@ class ApiService {
   late final Dio _dio;
   final FlutterSecureStorage _storage = const FlutterSecureStorage();
 
-  static String get _baseUrl {
+  static String get baseUrl {
     const ip = String.fromEnvironment('API_HOST');
     if (ip.isNotEmpty) return 'http://$ip:8000/api/v1';
     return 'http://10.0.2.2:8000/api/v1';
@@ -16,7 +16,7 @@ class ApiService {
   ApiService() {
     _dio = Dio(
       BaseOptions(
-        baseUrl: _baseUrl,
+        baseUrl: baseUrl,
         connectTimeout: const Duration(seconds: 10),
         receiveTimeout: const Duration(seconds: 10),
         headers: {'Content-Type': 'application/json'},
@@ -51,7 +51,7 @@ class ApiService {
     try {
       final refresh = await _storage.read(key: _refreshKey);
       if (refresh == null) return false;
-      final response = await Dio(BaseOptions(baseUrl: _baseUrl)).post(
+      final response = await Dio(BaseOptions(baseUrl: baseUrl)).post(
         '/auth/refresh/',
         data: {'refresh': refresh},
       );
@@ -132,6 +132,17 @@ class ApiService {
   Future<Map<String, dynamic>> patch(
       String path, Map<String, dynamic> data) async {
     final response = await _dio.patch(path, data: data);
+    return _toMap(response.data);
+  }
+
+  Future<Map<String, dynamic>> postMultipart(
+      String path, Map<String, dynamic> fields, String filePath,
+      {String fileKey = 'comprobante'}) async {
+    final formData = FormData.fromMap({
+      ...fields,
+      fileKey: await MultipartFile.fromFile(filePath),
+    });
+    final response = await _dio.post(path, data: formData);
     return _toMap(response.data);
   }
 

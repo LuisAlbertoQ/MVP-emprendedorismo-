@@ -7,6 +7,7 @@ class UserModel {
   final int animalesCount;
   final int generationsAllowed;
   final DateTime? createdAt;
+  final SolicitudPendiente? solicitudPendiente;
 
   UserModel({
     required this.id,
@@ -17,6 +18,7 @@ class UserModel {
     required this.animalesCount,
     required this.generationsAllowed,
     this.createdAt,
+    this.solicitudPendiente,
   });
 
   factory UserModel.fromJson(Map<String, dynamic> json) {
@@ -31,6 +33,33 @@ class UserModel {
       createdAt: json['created_at'] != null
           ? DateTime.tryParse(json['created_at'] as String)
           : null,
+      solicitudPendiente: json['solicitud_pendiente'] != null
+          ? SolicitudPendiente.fromJson(
+              json['solicitud_pendiente'] as Map<String, dynamic>)
+          : null,
+    );
+  }
+}
+
+class SolicitudPendiente {
+  final String uid;
+  final String planSolicitado;
+  final String monto;
+  final String createdAt;
+
+  SolicitudPendiente({
+    required this.uid,
+    required this.planSolicitado,
+    required this.monto,
+    required this.createdAt,
+  });
+
+  factory SolicitudPendiente.fromJson(Map<String, dynamic> json) {
+    return SolicitudPendiente(
+      uid: json['uid'] as String,
+      planSolicitado: json['plan_solicitado'] as String,
+      monto: json['monto'] as String,
+      createdAt: json['created_at'] as String,
     );
   }
 }

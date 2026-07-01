@@ -49,7 +49,8 @@ lib/
 │   │   ├── costo_model.dart           # CostoModel, CostoListModel
 │   │   ├── venta_fibra_model.dart     # VentaFibraModel, VentaFibraListModel
 │   │   ├── produccion_model.dart      # ProduccionModel
-│   │   └── user_model.dart            # UserModel
+│   │   ├── user_model.dart            # UserModel + SolicitudPendiente
+│   │   └── notificacion_model.dart    # NotificacionModel
 │   ├── services/
 │   │   └── api_service.dart           # Dio + interceptors JWT + extractError()
 │   └── repositories/
@@ -98,8 +99,12 @@ lib/
         │   └── consanguinidad_screen.dart
         ├── fibra_ranking/views/
         │   └── fibra_ranking_screen.dart
-        ├── perfil/views/
-        │   └── perfil_screen.dart
+        ├── perfil/providers/
+│   │   └── notificacion_provider.dart
+│   ├── perfil/views/
+│   │   ├── perfil_screen.dart
+│   │   ├── pago_screen.dart
+│   │   └── notificaciones_screen.dart
         └── reportes/views/
             └── reportes_screen.dart
 ```
@@ -136,9 +141,26 @@ lib/
 
 ### Perfil
 - Header con gradiente, plan con barra de progreso, cambiar plan, cerrar sesión
+- Badge "Solicitud pendiente" mientras el admin no apruebe/rechace
+- Plans de pago (Básico/Criador) redirigen a pantalla de pago
+
+### Pagos
+- QR + celular + monto según plan (desde ConfiguracionPago)
+- Subir captura del comprobante desde la galería
+- Campo opcional: número de operación
+- Confirmación: "Solicitud enviada, el administrador validará tu pago"
+- Planes bloqueados si hay una solicitud pendiente
+
+### Notificaciones
+- Campana 🔔 con badge rojo en el Dashboard
+- Al tocar: lista de notificaciones con icono por tipo
+- Tap para marcar como leída
+- Botón "Leer todas"
+- Pull-to-refresh para actualizar
 
 ### Reportes
-- Descarga CSV/PDF de animales y esquilas, compartir por WhatsApp/Drive
+- 8 tipos de reportes en CSV/PDF: Animales, Esquilas, Empadres, Partos, Costos, Ventas Fibra, Ranking Fibra, Consanguinidad
+- Compartir por WhatsApp/Drive desde la app
 
 ## Diseño y UX
 

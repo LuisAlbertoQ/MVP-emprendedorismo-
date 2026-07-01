@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:front_genapp/data/models/user_model.dart';
 import 'package:front_genapp/ui/core/theme.dart';
 import 'package:front_genapp/ui/features/auth/providers/auth_provider.dart';
@@ -194,6 +195,34 @@ class _PlanCard extends StatelessWidget {
                 color: color,
               ),
             ),
+            if (user.solicitudPendiente != null) ...[
+              const SizedBox(height: 8),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+                decoration: BoxDecoration(
+                  color: Colors.orange.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.orange.shade300),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.hourglass_bottom, color: Colors.orange, size: 20),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Solicitud pendiente: ${user.solicitudPendiente!.planSolicitado == 'criador' ? 'Criador' : 'Básico'}',
+                        style: const TextStyle(
+                          color: Colors.orange,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
             const SizedBox(height: 14),
             SizedBox(
               width: double.infinity,
@@ -234,7 +263,9 @@ class _CambioPlanSheet extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final currentPlan = ref.watch(authProvider).user?.plan ?? 'gratuito';
+    final user = ref.watch(authProvider).user;
+    final currentPlan = user?.plan ?? 'gratuito';
+    final hasPendingSolicitud = user?.solicitudPendiente != null;
     final plans = [
       _PlanOption(
         value: 'gratuito',
@@ -271,11 +302,12 @@ class _CambioPlanSheet extends ConsumerWidget {
           const SizedBox(height: 16),
           ...plans.map((p) {
             final isCurrent = p.value == currentPlan;
+            final isLocked = hasPendingSolicitud && p.value != 'gratuito' && !isCurrent;
             return Padding(
               padding: const EdgeInsets.only(bottom: 10),
               child: InkWell(
                 borderRadius: BorderRadius.circular(12),
-                onTap: isCurrent ? null : () => _cambiar(context, ref, p.value),
+                onTap: isCurrent || isLocked ? null : () => _cambiar(context, ref, p.value),
                 child: Container(
                   width: double.infinity,
                   padding:
@@ -288,7 +320,9 @@ class _CambioPlanSheet extends ConsumerWidget {
                     ),
                     color: isCurrent
                         ? p.color.withValues(alpha: 0.08)
-                        : Colors.transparent,
+                        : isLocked
+                            ? Colors.grey.withValues(alpha: 0.05)
+                            : Colors.transparent,
                   ),
                   child: Row(
                     children: [
@@ -317,7 +351,9 @@ class _CambioPlanSheet extends ConsumerWidget {
                         ),
                       ),
                       if (isCurrent) Icon(Icons.check_circle, color: p.color),
-                      if (!isCurrent)
+                      if (isLocked)
+                        const Icon(Icons.lock, size: 16, color: Colors.grey),
+                      if (!isCurrent && !isLocked)
                         Icon(Icons.arrow_forward_ios,
                             size: 16, color: Colors.grey.shade400),
                     ],
@@ -333,11 +369,16 @@ class _CambioPlanSheet extends ConsumerWidget {
 
   Future<void> _cambiar(
       BuildContext context, WidgetRef ref, String plan) async {
-    final error = await ref.read(authProvider.notifier).cambiarPlan(plan);
-    if (context.mounted) Navigator.pop(context);
-    if (error != null && context.mounted) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(error)));
+    if (plan == 'gratuito') {
+      final error = await ref.read(authProvider.notifier).cambiarPlan(plan);
+      if (context.mounted) Navigator.pop(context);
+      if (error != null && context.mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(error)));
+      }
+    } else {
+      context.push('/pago', extra: plan);
+      if (context.mounted) Navigator.pop(context);
     }
   }
 }

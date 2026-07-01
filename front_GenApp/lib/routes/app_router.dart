@@ -11,6 +11,8 @@ import 'package:front_genapp/ui/features/animales/views/animal_detail_screen.dar
 import 'package:front_genapp/ui/features/animales/views/animal_form_screen.dart';
 import 'package:front_genapp/ui/features/animales/views/arbol_screen.dart';
 import 'package:front_genapp/ui/features/perfil/views/perfil_screen.dart';
+import 'package:front_genapp/ui/features/perfil/views/pago_screen.dart';
+import 'package:front_genapp/ui/features/perfil/views/notificaciones_screen.dart';
 import 'package:front_genapp/ui/features/reportes/views/reportes_screen.dart';
 import 'package:front_genapp/ui/features/gestion/views/gestion_screen.dart';
 import 'package:front_genapp/ui/features/gestion/views/reproductivo_screen.dart';
@@ -173,6 +175,16 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/perfil',
             builder: (_, __) => const PerfilScreen(),
+          ),
+          GoRoute(
+            path: '/pago',
+            builder: (_, state) => PagoScreen(
+              plan: state.extra as String? ?? 'basico',
+            ),
+          ),
+          GoRoute(
+            path: '/notificaciones',
+            builder: (_, __) => const NotificacionesScreen(),
           ),
           GoRoute(
             path: '/reportes',

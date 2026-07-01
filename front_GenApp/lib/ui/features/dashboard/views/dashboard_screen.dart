@@ -5,6 +5,7 @@ import 'package:front_genapp/ui/core/constants.dart';
 import 'package:front_genapp/ui/core/theme.dart';
 import 'package:front_genapp/ui/features/auth/providers/auth_provider.dart';
 import 'package:front_genapp/ui/features/animales/providers/animal_provider.dart';
+import 'package:front_genapp/ui/features/perfil/providers/notificacion_provider.dart';
 
 class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({super.key});
@@ -21,6 +22,7 @@ class DashboardScreen extends ConsumerWidget {
           'Hola, ${user?.firstName.isNotEmpty == true ? user!.firstName : 'usuario'}',
         ),
         actions: [
+          _NotificacionBadge(),
           IconButton(
             icon: const Icon(Icons.person),
             onPressed: () => context.go(AppRoutes.perfil),
@@ -30,6 +32,8 @@ class DashboardScreen extends ConsumerWidget {
       body: RefreshIndicator(
         onRefresh: () async {
           ref.invalidate(resumenProvider);
+          ref.invalidate(notificacionesNoLeidasProvider);
+          ref.invalidate(notificacionesProvider);
           ref.read(authProvider.notifier).loadPerfil();
         },
         child: ListView(
@@ -349,6 +353,57 @@ class _QuickActions extends StatelessWidget {
             ),
           ],
         ),
+      ],
+    );
+  }
+}
+
+class _NotificacionBadge extends ConsumerStatefulWidget {
+  @override
+  ConsumerState<_NotificacionBadge> createState() => _NotificacionBadgeState();
+}
+
+class _NotificacionBadgeState extends ConsumerState<_NotificacionBadge> {
+  @override
+  void initState() {
+    super.initState();
+    Future.microtask(() {
+      ref.invalidate(notificacionesNoLeidasProvider);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final count = ref.watch(notificacionesNoLeidasProvider).asData?.value ?? 0;
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        IconButton(
+          icon: const Icon(Icons.notifications_outlined),
+          onPressed: () => context.push(AppRoutes.notificaciones),
+        ),
+        if (count > 0)
+          Positioned(
+            right: 6,
+            top: 6,
+            child: Container(
+              padding: const EdgeInsets.all(4),
+              decoration: const BoxDecoration(
+                color: Colors.red,
+                shape: BoxShape.circle,
+              ),
+              constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
+              child: Text(
+                count > 99 ? '99+' : '$count',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ),
       ],
     );
   }
